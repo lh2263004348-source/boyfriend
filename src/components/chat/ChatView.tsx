@@ -7,6 +7,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { IntimacyBar } from "@/components/chat/IntimacyBar";
 import { MessageBubble } from "@/components/chat/MessageBubble";
+import { NextStagePrompt } from "@/components/chat/NextStagePrompt";
+import { SurpriseCard } from "@/components/chat/SurpriseCard";
 import {
   StreamingText,
   TypingIndicator,
@@ -27,16 +29,17 @@ export function ChatView({
   initialMessages,
 }: ChatViewProps): React.ReactElement {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [intimacy, setIntimacy] = useState(boyfriend.intimacy);
+  const [surpriseGift, setSurpriseGift] = useState<{
+    name: string;
+    image: string;
+    meaning: string;
+  } | null>(null);
+  const [showNextStage, setShowNextStage] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const openingSentRef = useRef(initialMessages.length > 0);
-  const {
-    streamingText,
-    isStreaming,
-    isTyping,
-    error,
-    sendMessage,
-    reset,
-  } = useStreaming();
+  const { streamingText, isStreaming, isTyping, error, sendMessage, reset } =
+    useStreaming();
 
   const modeConfig = getRelationshipModeConfig(boyfriend.relationshipMode);
 
@@ -80,6 +83,14 @@ export function ChatView({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingText, isTyping, isStreaming]);
 
+  const reloadMessages = useCallback(async (): Promise<void> => {
+    const res = await fetch(
+      `/api/messages?boyfriendId=${boyfriend.id}&limit=50`
+    );
+    const data = (await res.json()) as { messages?: Message[] };
+    if (data.messages) setMessages(data.messages);
+  }, [boyfriend.id]);
+
   const handleSend = useCallback(
     async (text: string): Promise<void> => {
       const tempUserMessage: Message = {
@@ -96,21 +107,32 @@ export function ChatView({
       setMessages((prev) => [...prev, tempUserMessage]);
 
       try {
-        await sendMessage(boyfriend.id, text);
+        const result = await sendMessage(boyfriend.id, text);
         reset();
 
-        const res = await fetch(
-          `/api/messages?boyfriendId=${boyfriend.id}&limit=50`
-        );
-        const data = (await res.json()) as { messages?: Message[] };
-        if (data.messages) {
-          setMessages(data.messages);
+        if (result.meta) {
+          setIntimacy(result.meta.intimacy);
+          if (result.meta.showNextStage) setShowNextStage(true);
+          if (
+            result.meta.surprise?.type === "gift" &&
+            result.meta.surprise.giftName &&
+            result.meta.surprise.giftImage &&
+            result.meta.surprise.giftMeaning
+          ) {
+            setSurpriseGift({
+              name: result.meta.surprise.giftName,
+              image: result.meta.surprise.giftImage,
+              meaning: result.meta.surprise.giftMeaning,
+            });
+          }
         }
+
+        await reloadMessages();
       } catch {
         setMessages((prev) => prev.filter((m) => m.id !== tempUserMessage.id));
       }
     },
-    [boyfriend.id, reset, sendMessage]
+    [boyfriend.id, reloadMessages, reset, sendMessage]
   );
 
   return (
@@ -140,7 +162,7 @@ export function ChatView({
             </h1>
           </div>
         </div>
-        <IntimacyBar value={boyfriend.intimacy} />
+        <IntimacyBar value={intimacy} />
       </header>
 
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col overflow-hidden">
@@ -161,6 +183,19 @@ export function ChatView({
         </div>
         <ChatInput onSend={handleSend} disabled={isTyping || isStreaming} />
       </div>
+
+      {surpriseGift ? (
+        <SurpriseCard
+          giftName={surpriseGift.name}
+          giftImage={surpriseGift.image}
+          giftMeaning={surpriseGift.meaning}
+          onAccept={() => setSurpriseGift(null)}
+        />
+      ) : null}
+      <NextStagePrompt
+        open={showNextStage}
+        onClose={() => setShowNextStage(false)}
+      />
     </div>
   );
 }

@@ -87,6 +87,34 @@ export async function deleteBoyfriend(
   return result.length > 0;
 }
 
+export async function incrementIntimacy(
+  id: string,
+  userId: string
+): Promise<Boyfriend | null> {
+  const bf = await getBoyfriendById(id, userId);
+  if (!bf) return null;
+  if (bf.intimacy >= 100) return bf;
+
+  return updateBoyfriend(id, userId, { intimacy: bf.intimacy + 1 });
+}
+
+export async function recordSurprise(
+  id: string,
+  userId: string
+): Promise<Boyfriend | null> {
+  const bf = await getBoyfriendById(id, userId);
+  if (!bf) return null;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const countToday =
+    bf.lastSurpriseDate === today ? bf.surpriseCountToday + 1 : 1;
+
+  return updateBoyfriend(id, userId, {
+    lastSurpriseAt: new Date(),
+    lastSurpriseDate: today,
+    surpriseCountToday: countToday,
+  });
+}
 export async function updateBoyfriendPreview(
   id: string,
   userId: string,

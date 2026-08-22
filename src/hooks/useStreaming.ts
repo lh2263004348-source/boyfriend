@@ -4,12 +4,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getDisplayContent } from "@/lib/llm/parser";
 import type { LLMDecision } from "@/lib/types";
+import type { SurprisePayload } from "@/lib/surprise/trigger";
 
 const MIN_TYPING_MS = 1500;
+
+export interface StreamMeta {
+  intimacy: number;
+  showNextStage: boolean;
+  surprise: SurprisePayload | null;
+}
 
 export interface StreamResult {
   content: string;
   decision: LLMDecision | null;
+  meta: StreamMeta | null;
 }
 
 export interface UseStreamingResult {
@@ -78,6 +86,7 @@ export function useStreaming(): UseStreamingResult {
         const decoder = new TextDecoder();
         let buffer = "";
         let decision: LLMDecision | null = null;
+        let meta: StreamMeta | null = null;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -97,10 +106,14 @@ export function useStreaming(): UseStreamingResult {
               const parsed = JSON.parse(data) as {
                 content?: string;
                 decision?: LLMDecision;
+                meta?: StreamMeta;
                 error?: string;
               };
               if (parsed.error) {
                 throw new Error(parsed.error);
+              }
+              if (parsed.meta) {
+                meta = parsed.meta;
               }
               if (parsed.decision) {
                 decision = parsed.decision;
@@ -123,7 +136,7 @@ export function useStreaming(): UseStreamingResult {
 
         setIsStreaming(false);
         const content = getDisplayContent(rawBufferRef.current).trim();
-        return { content, decision };
+        return { content, decision, meta };
       } catch (err) {
         setIsTyping(false);
         setIsStreaming(false);

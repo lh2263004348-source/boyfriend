@@ -4,10 +4,20 @@ import { splitContentAndDecision } from "@/lib/llm/parser";
 import { getSystemPrompt } from "@/lib/llm/prompts";
 import {
   assertBoyfriendOwnership,
+  incrementIntimacy,
+  recordSurprise,
   updateBoyfriendPreview,
 } from "@/lib/repositories/boyfriends";
-import { createMessage, listMessagesByBoyfriendId } from "@/lib/repositories/messages";
+import {
+  createMessage,
+  listMessagesByBoyfriendId,
+} from "@/lib/repositories/messages";
 import { listProfileFactsByBoyfriendId } from "@/lib/repositories/profileFacts";
+import {
+  tryTriggerSurprise,
+  type SurprisePayload,
+} from "@/lib/surprise/trigger";
+import { synthesizeSpeech } from "@/lib/tts/client";
 
 export async function POST(request: Request): Promise<Response> {
   const session = await auth();
@@ -28,7 +38,7 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const boyfriend = await assertBoyfriendOwnership(
+    let boyfriend = await assertBoyfriendOwnership(
       body.boyfriendId,
       session.user.id
     );
@@ -40,6 +50,8 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const userMessage = body.userMessage.trim();
+    const prevIntimacy = boyfriend.intimacy;
+    const showNextStage = prevIntimacy === 99;
 
     await createMessage(
       {
@@ -51,12 +63,23 @@ export async function POST(request: Request): Promise<Response> {
       session.user.id
     );
 
+    boyfriend =
+      (await incrementIntimacy(body.boyfriendId, session.user.id)) ?? boyfriend;
     await updateBoyfriendPreview(body.boyfriendId, session.user.id, userMessage);
 
     const [history, profileFacts] = await Promise.all([
       listMessagesByBoyfriendId(body.boyfriendId, session.user.id, { limit: 20 }),
       listProfileFactsByBoyfriendId(body.boyfriendId, session.user.id),
     ]);
+
+    const lastUserMsg = history.filter((m) => m.role === "user").at(-1);
+    const surpriseMessagesSince = boyfriend.lastSurpriseAt
+      ? history.filter(
+          (m) => m.createdAt > boyfriend!.lastSurpriseAt! && m.role === "user"
+        ).length
+      : history.filter((m) => m.role === "user").length;
+
+    let surprisePayload: SurprisePayload | null = null;
 
     const llmMessages = [
       {
@@ -110,6 +133,68 @@ export async function POST(request: Request): Promise<Response> {
               )
             );
           }
+
+          surprisePayload = tryTriggerSurprise(
+            boyfriend!,
+            history,
+            surpriseMessagesSince,
+            lastUserMsg
+          );
+
+          if (surprisePayload) {
+            boyfriend =
+              (await recordSurprise(body.boyfriendId!, session.user!.id)) ??
+              boyfriend;
+
+            if (surprisePayload.type === "gift") {
+              await createMessage(
+                {
+                  boyfriendId: body.boyfriendId!,
+                  role: "boyfriend",
+                  type: "image",
+                  content: `[礼物] ${surprisePayload.giftName}`,
+                  mediaKey: surprisePayload.giftImage ?? null,
+                  isSurprise: true,
+                },
+                session.user!.id
+              );
+            } else {
+              let audioUrl: string | null = null;
+              try {
+                const tts = await synthesizeSpeech({
+                  text: surprisePayload.songLyrics ?? "",
+                  mode: boyfriend!.relationshipMode,
+                });
+                audioUrl = tts.audioUrl;
+              } catch {
+                // TTS 失败降级为文字
+              }
+
+              await createMessage(
+                {
+                  boyfriendId: body.boyfriendId!,
+                  role: "boyfriend",
+                  type: audioUrl ? "voice" : "text",
+                  content: `🎵 ${surprisePayload.songTitle}\n${surprisePayload.songLyrics}`,
+                  mediaKey: audioUrl,
+                  isSurprise: true,
+                },
+                session.user!.id
+              );
+            }
+          }
+
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({
+                meta: {
+                  intimacy: boyfriend!.intimacy,
+                  showNextStage,
+                  surprise: surprisePayload,
+                },
+              })}\n\n`
+            )
+          );
 
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           controller.close();
