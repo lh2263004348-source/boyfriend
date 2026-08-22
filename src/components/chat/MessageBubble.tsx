@@ -10,6 +10,16 @@ interface MessageBubbleProps {
 export function MessageBubble({ message }: MessageBubbleProps): React.ReactElement {
   const isUser = message.role === "user";
 
+  if (message.type === "image" && !message.mediaKey) {
+    return (
+      <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-3`}>
+        <div className="max-w-[75%] rounded-2xl bg-white px-4 py-3 shadow-sm">
+          <p className="text-sm text-muted-foreground">图片生成中…</p>
+        </div>
+      </div>
+    );
+  }
+
   if (message.type === "image" && message.mediaKey) {
     return (
       <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-3`}>

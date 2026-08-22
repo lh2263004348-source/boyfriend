@@ -1,0 +1,48 @@
+/** 场景图触发关键词（辅助 prompt 规则） */
+export const SCENE_KEYWORDS = [
+  "旅行",
+  "海边",
+  "咖啡",
+  "雨夜",
+  "星空",
+  "回忆",
+  "小时候",
+  "大学",
+  "工作",
+  "加班",
+  "散步",
+  "电影",
+  "餐厅",
+  "公园",
+  "下雪",
+  "春天",
+  "夏天",
+  "秋天",
+  "冬天",
+  "生日",
+  "节日",
+  "周末",
+  "约会",
+  "见面",
+  "拍照",
+  "风景",
+  "日落",
+  "夜景",
+  "家",
+  "房间",
+  "厨房",
+  "阳台",
+  "地铁",
+  "飞机",
+  "火车",
+  "露营",
+  "野餐",
+  "花",
+  "猫",
+  "狗",
+];
+
+export function matchesSceneKeyword(text: string): boolean {
+  const lower = text.toLowerCase();
+  return SCENE_KEYWORDS.some((kw) => lower.includes(kw.toLowerCase()));
+}
