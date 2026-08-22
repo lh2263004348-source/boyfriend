@@ -74,3 +74,69 @@
     font-family: "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif;
   }
 }
+
+/* DESIGN.md tokens */
+:root {
+  --shadow-surprise: 0 12px 32px rgba(232, 165, 152, 0.2);
+  --text-message: 15px;
+}
+
+/* Safe area for mobile notches / home indicator */
+.pb-safe {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+/* Message bubble enter animation */
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-bubble-in {
+  animation: bubble-in 0.3s ease-out both;
+}
+
+/* Modal enter animation */
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-modal-in {
+  animation: modal-in 0.4s ease-out both;
+}
+
+/* Card hover lift */
+.card-hover {
+  transition:
+    box-shadow 0.2s ease-out,
+    transform 0.2s ease-out;
+}
+
+.card-hover:hover {
+  box-shadow: var(--shadow-md, 0 4px 16px rgba(45, 37, 32, 0.06));
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-bubble-in,
+  .animate-modal-in {
+    animation: none;
+  }
+
+  .card-hover:hover {
+    transform: none;
+  }
+}

@@ -30,7 +30,10 @@ export function ChatInput({
   }
 
   return (
-    <div className="border-t border-border bg-[var(--color-bg-primary)]">
+    <div
+      className="border-t border-border bg-[var(--color-bg-primary)] pb-safe"
+      style={{ touchAction: "manipulation" }}
+    >
       <StickerPicker
         open={stickerOpen}
         onClose={() => setStickerOpen(false)}
@@ -43,7 +46,9 @@ export function ChatInput({
           size="icon"
           disabled={disabled}
           onClick={() => setStickerOpen((v) => !v)}
-          className="shrink-0 rounded-xl"
+          className="size-11 shrink-0 cursor-pointer rounded-xl"
+          aria-label={stickerOpen ? "关闭表情包" : "选择表情包"}
+          aria-expanded={stickerOpen}
         >
           <Smile className="size-5" />
         </Button>
@@ -59,13 +64,15 @@ export function ChatInput({
           placeholder="说点什么…"
           rows={1}
           disabled={disabled}
-          className="max-h-32 min-h-10 flex-1 resize-none rounded-xl border border-input bg-white px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50"
+          aria-label="消息输入框"
+          className="max-h-32 min-h-11 flex-1 resize-none rounded-xl border border-input bg-muted px-3 py-2.5 text-[length:var(--text-message)] text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50"
         />
         <Button
           type="submit"
           size="icon"
           disabled={disabled || !text.trim()}
-          className="shrink-0 rounded-xl"
+          className="size-11 shrink-0 cursor-pointer rounded-xl"
+          aria-label="发送消息"
         >
           <Send className="size-4" />
         </Button>

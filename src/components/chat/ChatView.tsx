@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { IntimacyBar } from "@/components/chat/IntimacyBar";
 import { MessageBubble } from "@/components/chat/MessageBubble";
+import { MessageTimeDivider } from "@/components/chat/MessageTimeDivider";
 import { NextStagePrompt } from "@/components/chat/NextStagePrompt";
 import { SurpriseCard } from "@/components/chat/SurpriseCard";
 import {
@@ -16,6 +17,10 @@ import {
 import { useProactive } from "@/hooks/useProactive";
 import { useStreaming } from "@/hooks/useStreaming";
 import { useChatDispatch } from "@/components/providers/ChatProvider";
+import {
+  formatMessageTime,
+  shouldShowTimeDivider,
+} from "@/lib/chat/timeFormat";
 import type { StickerItem } from "@/lib/stickers/data";
 import { getRelationshipModeConfig } from "@/lib/relationship/config";
 import type { Boyfriend, Message, UserProfileFact } from "@/lib/types";
@@ -43,6 +48,8 @@ export function ChatView({
   } | null>(null);
   const [showNextStage, setShowNextStage] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isLoadingOlderRef = useRef(false);
   const openingSentRef = useRef(false);
   const lastUserTextRef = useRef("");
   const { streamingText, isStreaming, isTyping, error, sendMessage, reset } =
@@ -137,6 +144,24 @@ export function ChatView({
   }, [boyfriend.id]);
 
   useEffect(() => {
+    void fetch("/api/boyfriends", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: boyfriend.id, markRead: true }),
+    }).then((res) => {
+      if (res.ok) {
+        dispatch({
+          type: "UPDATE_BOYFRIEND",
+          boyfriend: { ...boyfriend, unreadCount: 0 },
+        });
+      }
+    });
+    // 进入聊天页时清零未读，仅执行一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boyfriend.id, dispatch]);
+
+  useEffect(() => {
+    if (isLoadingOlderRef.current) return;
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingText, isTyping, isStreaming]);
 
@@ -174,7 +199,11 @@ export function ChatView({
     const oldest = messages[0];
     if (!oldest || loadingMore) return;
 
+    const scrollEl = scrollContainerRef.current;
+    const prevScrollHeight = scrollEl?.scrollHeight ?? 0;
+
     setLoadingMore(true);
+    isLoadingOlderRef.current = true;
     try {
       const cursor = encodeURIComponent(
         new Date(oldest.createdAt).toISOString()
@@ -186,11 +215,17 @@ export function ChatView({
       if (data.messages && data.messages.length > 0) {
         setMessages((prev) => [...data.messages!, ...prev]);
         setHasMore(data.messages.length >= 50);
+        requestAnimationFrame(() => {
+          if (scrollEl) {
+            scrollEl.scrollTop = scrollEl.scrollHeight - prevScrollHeight;
+          }
+        });
       } else {
         setHasMore(false);
       }
     } finally {
       setLoadingMore(false);
+      isLoadingOlderRef.current = false;
     }
   }, [boyfriend.id, loadingMore, messages]);
 
@@ -346,11 +381,12 @@ export function ChatView({
 
   return (
     <div className="flex h-[100dvh] flex-col bg-[var(--color-bg-primary)]">
-      <header className="border-b border-border bg-white/80 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-lg items-center gap-3 px-4 py-3">
+      <header className="shrink-0 border-b border-border bg-white/80 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-lg items-center gap-2 px-3 py-2">
           <Link
             href="/"
-            className="text-sm text-muted-foreground hover:text-foreground"
+            className="flex min-h-[44px] min-w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="返回主页"
           >
             ←
           </Link>
@@ -364,37 +400,54 @@ export function ChatView({
             />
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate font-medium">
+            <h1 className="truncate text-sm font-medium">
               {boyfriend.nickname}
               <span className="text-muted-foreground">·</span>
               <span style={{ color: modeConfig.color }}>{modeConfig.label}</span>
             </h1>
+            <IntimacyBar value={intimacy} variant="header" />
           </div>
         </div>
-        <IntimacyBar value={intimacy} />
       </header>
 
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 overflow-y-auto overscroll-contain px-4 py-4"
+          role="log"
+          aria-live="polite"
+          aria-label={`与 ${boyfriend.nickname} 的聊天记录`}
+        >
           {hasMore ? (
             <button
               type="button"
               onClick={() => void loadOlderMessages()}
               disabled={loadingMore}
-              className="mb-4 w-full rounded-xl py-2 text-sm text-muted-foreground hover:bg-white/60"
+              className="mb-4 min-h-[44px] w-full cursor-pointer rounded-xl py-2 text-sm text-muted-foreground transition-colors hover:bg-white/60 disabled:opacity-50"
             >
               {loadingMore ? "加载中…" : "加载更早的消息"}
             </button>
           ) : null}
-          {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} />
-          ))}
+          {messages.map((message, index) => {
+            const previous = index > 0 ? messages[index - 1] : undefined;
+            const showTime = shouldShowTimeDivider(message, previous);
+            return (
+              <div key={message.id}>
+                {showTime ? (
+                  <MessageTimeDivider
+                    time={formatMessageTime(message.createdAt)}
+                  />
+                ) : null}
+                <MessageBubble message={message} />
+              </div>
+            );
+          })}
           <TypingIndicator visible={isTyping} />
           {isStreaming && streamingText ? (
             <StreamingText text={streamingText} />
           ) : null}
           {error ? (
-            <p className="text-center text-sm text-[var(--color-error)]">
+            <p className="text-center text-sm text-[var(--color-error)]" role="alert">
               {error}
             </p>
           ) : null}

@@ -8,6 +8,11 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "纸片人男友",
   description: "温暖的虚拟男友陪伴",
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    viewportFit: "cover",
+  },
 };
 
 export default function RootLayout({

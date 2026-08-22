@@ -130,6 +130,13 @@ export async function updateBoyfriendPreview(
     .where(and(eq(boyfriends.id, id), eq(boyfriends.userId, userId)));
 }
 
+export async function clearUnreadCount(
+  id: string,
+  userId: string
+): Promise<Boyfriend | null> {
+  return updateBoyfriend(id, userId, { unreadCount: 0 });
+}
+
 /** 校验男友归属，不属于当前用户则返回 null */
 export async function assertBoyfriendOwnership(
   boyfriendId: string,

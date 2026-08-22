@@ -22,22 +22,23 @@ export function StickerPicker({
         <button
           type="button"
           onClick={onClose}
-          className="text-sm text-muted-foreground hover:text-foreground"
+          className="min-h-[44px] cursor-pointer px-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           关闭
         </button>
       </div>
-      <div className="grid max-h-40 grid-cols-8 gap-2 overflow-y-auto">
+      <div className="grid max-h-40 grid-cols-6 gap-2 overflow-y-auto sm:grid-cols-8">
         {STICKERS.map((sticker) => (
           <button
             key={sticker.id}
             type="button"
             title={sticker.label}
+            aria-label={sticker.label}
             onClick={() => {
               onSelect(sticker);
               onClose();
             }}
-            className="flex size-10 items-center justify-center rounded-xl text-2xl hover:bg-[var(--color-accent-soft)]"
+            className="flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-xl text-2xl transition-colors hover:bg-[var(--color-accent-soft)]"
           >
             {sticker.emoji}
           </button>

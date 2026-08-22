@@ -9,6 +9,7 @@ export function LogoutButton(): React.ReactElement {
     <Button
       variant="outline"
       size="sm"
+      className="min-h-[44px] cursor-pointer"
       onClick={() => signOut({ callbackUrl: "/login" })}
     >
       退出登录

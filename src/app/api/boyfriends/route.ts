@@ -6,6 +6,8 @@ import {
   deleteBoyfriend,
   getBoyfriendById,
   listBoyfriendsByUserId,
+  clearUnreadCount,
+  updateBoyfriend,
 } from "@/lib/repositories/boyfriends";
 import type { RelationshipMode } from "@/lib/types";
 
@@ -130,7 +132,11 @@ export async function PATCH(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const body = (await request.json()) as { id?: string };
+    const body = (await request.json()) as {
+      id?: string;
+      markRead?: boolean;
+      intimacy?: number;
+    };
     if (!body.id) {
       return NextResponse.json(
         { error: "缺少男友 ID", code: "VALIDATION_ERROR" },
@@ -144,6 +150,18 @@ export async function PATCH(request: Request): Promise<NextResponse> {
         { error: "男友不存在或无权访问", code: "FORBIDDEN" },
         { status: 403 }
       );
+    }
+
+    if (body.markRead) {
+      const updated = await clearUnreadCount(body.id, session.user.id);
+      return NextResponse.json({ boyfriend: updated });
+    }
+
+    if (typeof body.intimacy === "number") {
+      const updated = await updateBoyfriend(body.id, session.user.id, {
+        intimacy: body.intimacy,
+      });
+      return NextResponse.json({ boyfriend: updated });
     }
 
     return NextResponse.json({ boyfriend });

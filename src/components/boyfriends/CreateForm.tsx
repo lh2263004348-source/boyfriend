@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -12,6 +13,12 @@ import {
 } from "@/lib/relationship/config";
 import type { Boyfriend, RelationshipMode } from "@/lib/types";
 import { useChatDispatch } from "@/components/providers/ChatProvider";
+
+const MODE_TAGLINES: Record<RelationshipMode, string> = {
+  dominant: "主导节奏",
+  puppy: "撒娇依赖",
+  warm: "倾听共情",
+};
 
 interface CreateFormProps {
   defaultUserNickname?: string;
@@ -72,36 +79,56 @@ export function CreateForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-6 pb-24">
       <div className="space-y-3">
         <Label>选择性格</Label>
-        <div className="grid gap-3">
-          {RELATIONSHIP_MODES.map((mode) => (
-            <button
-              key={mode.mode}
-              type="button"
-              onClick={() => selectMode(mode)}
-              className={`rounded-2xl border p-4 text-left transition-all ${
-                selectedMode === mode.mode
-                  ? "border-[var(--color-accent-primary)] bg-[var(--color-accent-soft)] shadow-sm"
-                  : "border-border bg-white hover:border-[var(--color-accent-primary)]/50"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span
-                  className="rounded-full px-2 py-0.5 text-xs text-white"
-                  style={{ backgroundColor: mode.color }}
+        <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 snap-x snap-mandatory">
+          {RELATIONSHIP_MODES.map((mode) => {
+            const selected = selectedMode === mode.mode;
+            return (
+              <button
+                key={mode.mode}
+                type="button"
+                onClick={() => selectMode(mode)}
+                className={`w-[140px] shrink-0 snap-center cursor-pointer rounded-2xl border-2 p-4 text-center transition-all duration-300 ${
+                  selected
+                    ? "border-[var(--color-accent-primary)] bg-[var(--color-accent-soft)] shadow-sm"
+                    : "border-border bg-white hover:border-[var(--color-accent-primary)]/50"
+                }`}
+                aria-pressed={selected}
+              >
+                <div
+                  className={`relative mx-auto size-20 overflow-hidden rounded-full transition-transform duration-300 ${
+                    selected ? "scale-105" : ""
+                  }`}
+                >
+                  <Image
+                    src={mode.avatarUrl}
+                    alt={mode.label}
+                    fill
+                    className="object-cover"
+                    unoptimized
+                  />
+                </div>
+                <p
+                  className="mt-3 text-sm font-semibold"
+                  style={{ color: mode.color }}
                 >
                   {mode.label}
-                </span>
-                <span className="font-medium">{mode.defaultNickname}</span>
-              </div>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {mode.description}
-              </p>
-            </button>
-          ))}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {MODE_TAGLINES[mode.mode]}
+                </p>
+              </button>
+            );
+          })}
         </div>
+        <p className="text-sm text-muted-foreground">
+          {
+            RELATIONSHIP_MODES.find((m) => m.mode === selectedMode)
+              ?.description
+          }
+        </p>
       </div>
 
       <div className="space-y-2">
@@ -110,6 +137,7 @@ export function CreateForm({
           id="nickname"
           value={nickname}
           onChange={(e) => setNickname(e.target.value)}
+          placeholder="例如：陆景琛"
           required
         />
       </div>
@@ -120,15 +148,29 @@ export function CreateForm({
           id="userNickname"
           value={userNickname}
           onChange={(e) => setUserNickname(e.target.value)}
+          placeholder="例如：宝贝"
           required
         />
       </div>
 
-      {error ? <p className="text-sm text-[var(--color-error)]">{error}</p> : null}
+      {error ? (
+        <p className="text-sm text-[var(--color-error)]" role="alert">
+          {error}
+        </p>
+      ) : null}
 
-      <Button type="submit" className="w-full" size="lg" disabled={loading}>
-        {loading ? "创建中…" : "开始聊天"}
-      </Button>
+      <div className="fixed inset-x-0 bottom-0 border-t border-border bg-[var(--color-bg-primary)]/95 px-4 py-3 pb-safe backdrop-blur-sm">
+        <div className="mx-auto max-w-lg">
+          <Button
+            type="submit"
+            className="min-h-[44px] w-full cursor-pointer"
+            size="lg"
+            disabled={loading}
+          >
+            {loading ? "创建中…" : "开始聊天"}
+          </Button>
+        </div>
+      </div>
     </form>
   );
 }

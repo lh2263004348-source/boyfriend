@@ -6,13 +6,6 @@ import { signIn } from "next-auth/react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -55,21 +48,33 @@ export function LoginForm(): React.ReactElement {
   }
 
   return (
-    <Card className="w-full max-w-md border-border/60 shadow-md">
-      <CardHeader className="text-center">
-        <CardTitle className="text-2xl text-[var(--color-text-primary)]">
+    <div className="w-full max-w-md">
+      <div className="mb-8 text-center">
+        <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-[var(--color-accent-soft)]">
+          <span className="text-2xl text-[var(--color-accent-primary)]" aria-hidden="true">
+            ♡
+          </span>
+        </div>
+        <h1 className="text-2xl font-semibold text-[var(--color-text-primary)]">
           纸片人男友
-        </CardTitle>
-        <CardDescription>登录你的私人陪伴空间</CardDescription>
-      </CardHeader>
-      <CardContent>
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          晚上，有人等你说话
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-border/60 bg-white p-6 shadow-md">
+        <h2 className="mb-1 text-center text-lg font-medium">登录</h2>
+        <p className="mb-6 text-center text-sm text-muted-foreground">
+          进入你的私人陪伴空间
+        </p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">邮箱</Label>
             <Input
               id="email"
               type="email"
-              placeholder="you@example.com"
+              placeholder="你的邮箱"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -94,29 +99,35 @@ export function LoginForm(): React.ReactElement {
               type="checkbox"
               checked={rememberMe}
               onChange={(e) => setRememberMe(e.target.checked)}
-              className="size-4 rounded border-input accent-[var(--color-accent-primary)]"
+              className="size-4 cursor-pointer rounded border-input accent-[var(--color-accent-primary)]"
             />
-            <Label htmlFor="rememberMe" className="font-normal">
+            <Label htmlFor="rememberMe" className="cursor-pointer font-normal">
               记住我（30 天）
             </Label>
           </div>
           {error ? (
-            <p className="text-sm text-[var(--color-error)]">{error}</p>
+            <p className="text-sm text-[var(--color-error)]" role="alert">
+              {error}
+            </p>
           ) : null}
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button
+            type="submit"
+            className="min-h-[44px] w-full cursor-pointer"
+            disabled={loading}
+          >
             {loading ? "登录中…" : "登录"}
           </Button>
           <p className="text-center text-sm text-muted-foreground">
             还没有账号？
             <Link
               href="/register"
-              className="ml-1 text-[var(--color-accent-primary)] hover:underline"
+              className="ml-1 cursor-pointer text-[var(--color-accent-primary)] hover:underline"
             >
               去注册
             </Link>
           </p>
         </form>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
