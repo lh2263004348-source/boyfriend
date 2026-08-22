@@ -1,5 +1,6 @@
 "use client";
 
+import { getStickerById } from "@/lib/stickers/data";
 import type { Message } from "@/lib/types";
 
 interface MessageBubbleProps {
@@ -36,11 +37,14 @@ export function MessageBubble({ message }: MessageBubbleProps): React.ReactEleme
     );
   }
 
-  if (message.type === "sticker" && message.mediaKey) {
+  if (message.type === "sticker") {
+    const sticker = getStickerById(message.content);
+    const emoji = sticker?.emoji ?? message.content;
     return (
       <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-3`}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={message.mediaKey} alt="sticker" className="size-24 object-contain" />
+        <div className="flex size-20 items-center justify-center rounded-2xl bg-white text-5xl shadow-sm">
+          {emoji}
+        </div>
       </div>
     );
   }
@@ -55,6 +59,9 @@ export function MessageBubble({ message }: MessageBubbleProps): React.ReactEleme
         } ${message.isSurprise ? "ring-2 ring-[var(--color-accent-warm)]" : ""}`}
       >
         {message.content}
+        {message.emotion && isUser ? (
+          <span className="ml-1 text-xs opacity-60">·{message.emotion}</span>
+        ) : null}
       </div>
     </div>
   );

@@ -96,6 +96,8 @@ export interface LLMDecision {
   imagePrompt: string;
   surpriseTriggered: boolean;
   surpriseType: "song" | "gift" | "none";
+  sendSticker?: boolean;
+  stickerEmotion?: string;
 }
 
 /** Session 用户（Auth.js 扩展） */

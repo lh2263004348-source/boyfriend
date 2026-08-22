@@ -36,7 +36,9 @@ const DECISION_BLOCK = `
   "imageType": "scene | selfie | gift | share",
   "imagePrompt": "",
   "surpriseTriggered": false,
-  "surpriseType": "song | gift | none"
+  "surpriseType": "song | gift | none",
+  "sendSticker": false,
+  "stickerEmotion": "happy | sad | heart | shy | angry | neutral"
 }
 </DECISION>`;
 
@@ -44,7 +46,8 @@ export function getSystemPrompt(
   boyfriend: Boyfriend,
   memorySummary = "",
   profileFacts: UserProfileFact[] = [],
-  intimacy?: number
+  intimacy?: number,
+  userEmotion?: string | null
 ): string {
   const mode = boyfriend.relationshipMode;
   const today = new Date().toISOString().slice(0, 10);
@@ -81,6 +84,7 @@ ${memorySummary || "（暂无）"}
 1. 像真人微信聊天，保持 1-3 句话的短消息
 2. 主动创造话题，但不要每句都问问题
 3. 回复正文与 <DECISION> 分开，正文不要包含 JSON
+${userEmotion ? `4. 用户当前情绪：${userEmotion}，请相应调整语气` : ""}
 ${DECISION_BLOCK}`;
 }
 

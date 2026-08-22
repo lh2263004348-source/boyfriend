@@ -17,6 +17,7 @@ import { useProactive } from "@/hooks/useProactive";
 import { useStreaming } from "@/hooks/useStreaming";
 import { getOpeningMessage } from "@/lib/relationship/openings";
 import { getRelationshipModeConfig } from "@/lib/relationship/config";
+import type { StickerItem } from "@/lib/stickers/data";
 import type { Boyfriend, Message } from "@/lib/types";
 
 interface ChatViewProps {
@@ -135,6 +136,25 @@ export function ChatView({
     [boyfriend.id, reloadMessages, reset, sendMessage]
   );
 
+  const handleSendSticker = useCallback(
+    async (sticker: StickerItem): Promise<void> => {
+      const res = await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          boyfriendId: boyfriend.id,
+          role: "user",
+          type: "sticker",
+          content: sticker.id,
+          emotion: sticker.emotion,
+        }),
+      });
+      const data = (await res.json()) as { message?: Message };
+      if (data.message) addMessage(data.message);
+    },
+    [addMessage, boyfriend.id]
+  );
+
   return (
     <div className="flex h-[100dvh] flex-col bg-[var(--color-bg-primary)]">
       <header className="border-b border-border bg-white/80 backdrop-blur-sm">
@@ -181,7 +201,11 @@ export function ChatView({
           ) : null}
           <div ref={bottomRef} />
         </div>
-        <ChatInput onSend={handleSend} disabled={isTyping || isStreaming} />
+        <ChatInput
+          onSend={handleSend}
+          onSendSticker={handleSendSticker}
+          disabled={isTyping || isStreaming}
+        />
       </div>
 
       {surpriseGift ? (

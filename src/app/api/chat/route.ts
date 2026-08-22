@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth/config";
+import { detectEmotion } from "@/lib/emotion/detector";
 import { createLLMClient } from "@/lib/llm/client";
 import { splitContentAndDecision } from "@/lib/llm/parser";
 import { getSystemPrompt } from "@/lib/llm/prompts";
@@ -18,6 +19,7 @@ import {
   type SurprisePayload,
 } from "@/lib/surprise/trigger";
 import { synthesizeSpeech } from "@/lib/tts/client";
+import { getStickersByEmotion } from "@/lib/stickers/data";
 
 export async function POST(request: Request): Promise<Response> {
   const session = await auth();
@@ -50,6 +52,7 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const userMessage = body.userMessage.trim();
+    const userEmotion = detectEmotion(userMessage);
     const prevIntimacy = boyfriend.intimacy;
     const showNextStage = prevIntimacy === 99;
 
@@ -59,6 +62,7 @@ export async function POST(request: Request): Promise<Response> {
         role: "user",
         type: "text",
         content: userMessage,
+        emotion: userEmotion,
       },
       session.user.id
     );
@@ -87,7 +91,9 @@ export async function POST(request: Request): Promise<Response> {
         content: getSystemPrompt(
           boyfriend,
           boyfriend.memorySummary,
-          profileFacts
+          profileFacts,
+          undefined,
+          userEmotion
         ),
       },
       ...history.map((m) => ({
@@ -124,6 +130,24 @@ export async function POST(request: Request): Promise<Response> {
               session.user!.id
             );
             await updateBoyfriendPreview(body.boyfriendId!, session.user!.id, content);
+          }
+
+          if (decision?.sendSticker) {
+            const emotion = decision.stickerEmotion ?? decision.emotion ?? "happy";
+            const pool = getStickersByEmotion(emotion);
+            const sticker = pool[Math.floor(Math.random() * pool.length)] ?? pool[0];
+            if (sticker) {
+              await createMessage(
+                {
+                  boyfriendId: body.boyfriendId!,
+                  role: "boyfriend",
+                  type: "sticker",
+                  content: sticker.id,
+                  emotion,
+                },
+                session.user!.id
+              );
+            }
           }
 
           if (decision) {
