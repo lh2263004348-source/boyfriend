@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ChatInput } from "@/components/chat/ChatInput";
@@ -10,7 +11,9 @@ import {
   StreamingText,
   TypingIndicator,
 } from "@/components/chat/StreamingText";
+import { useProactive } from "@/hooks/useProactive";
 import { useStreaming } from "@/hooks/useStreaming";
+import { getOpeningMessage } from "@/lib/relationship/openings";
 import { getRelationshipModeConfig } from "@/lib/relationship/config";
 import type { Boyfriend, Message } from "@/lib/types";
 
@@ -25,6 +28,7 @@ export function ChatView({
 }: ChatViewProps): React.ReactElement {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const openingSentRef = useRef(initialMessages.length > 0);
   const {
     streamingText,
     isStreaming,
@@ -35,6 +39,42 @@ export function ChatView({
   } = useStreaming();
 
   const modeConfig = getRelationshipModeConfig(boyfriend.relationshipMode);
+
+  const addMessage = useCallback((message: Message): void => {
+    setMessages((prev) => {
+      if (prev.some((m) => m.id === message.id)) return prev;
+      return [...prev, message];
+    });
+  }, []);
+
+  useProactive({
+    boyfriendId: boyfriend.id,
+    relationshipMode: boyfriend.relationshipMode,
+    enabled: !isTyping && !isStreaming && messages.length > 0,
+    onProactiveMessage: addMessage,
+  });
+
+  useEffect(() => {
+    if (openingSentRef.current) return;
+    openingSentRef.current = true;
+
+    const content = getOpeningMessage(boyfriend.relationshipMode);
+    void fetch("/api/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        boyfriendId: boyfriend.id,
+        role: "boyfriend",
+        type: "text",
+        content,
+      }),
+    })
+      .then((res) => res.json())
+      .then((data: { message?: Message }) => {
+        if (data.message) addMessage(data.message);
+      })
+      .catch(() => undefined);
+  }, [addMessage, boyfriend.id, boyfriend.relationshipMode]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -83,15 +123,21 @@ export function ChatView({
           >
             ←
           </Link>
-          <div
-            className="flex size-9 items-center justify-center rounded-full text-sm font-semibold text-white"
-            style={{ backgroundColor: modeConfig.color }}
-          >
-            {boyfriend.nickname.slice(0, 1)}
+          <div className="relative size-9 shrink-0 overflow-hidden rounded-full">
+            <Image
+              src={boyfriend.avatarUrl}
+              alt={boyfriend.nickname}
+              fill
+              className="object-cover"
+              unoptimized
+            />
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate font-medium">{boyfriend.nickname}</h1>
-            <p className="text-xs text-muted-foreground">{modeConfig.label}</p>
+            <h1 className="truncate font-medium">
+              {boyfriend.nickname}
+              <span className="text-muted-foreground">·</span>
+              <span style={{ color: modeConfig.color }}>{modeConfig.label}</span>
+            </h1>
           </div>
         </div>
         <IntimacyBar value={boyfriend.intimacy} />

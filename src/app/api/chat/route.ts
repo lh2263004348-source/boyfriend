@@ -1,7 +1,13 @@
 import { auth } from "@/lib/auth/config";
-import { createLLMClient, getSimpleSystemPrompt } from "@/lib/llm/client";
-import { assertBoyfriendOwnership } from "@/lib/repositories/boyfriends";
+import { createLLMClient } from "@/lib/llm/client";
+import { splitContentAndDecision } from "@/lib/llm/parser";
+import { getSystemPrompt } from "@/lib/llm/prompts";
+import {
+  assertBoyfriendOwnership,
+  updateBoyfriendPreview,
+} from "@/lib/repositories/boyfriends";
 import { createMessage, listMessagesByBoyfriendId } from "@/lib/repositories/messages";
+import { listProfileFactsByBoyfriendId } from "@/lib/repositories/profileFacts";
 
 export async function POST(request: Request): Promise<Response> {
   const session = await auth();
@@ -45,14 +51,22 @@ export async function POST(request: Request): Promise<Response> {
       session.user.id
     );
 
-    const history = await listMessagesByBoyfriendId(
-      body.boyfriendId,
-      session.user.id,
-      { limit: 20 }
-    );
+    await updateBoyfriendPreview(body.boyfriendId, session.user.id, userMessage);
+
+    const [history, profileFacts] = await Promise.all([
+      listMessagesByBoyfriendId(body.boyfriendId, session.user.id, { limit: 20 }),
+      listProfileFactsByBoyfriendId(body.boyfriendId, session.user.id),
+    ]);
 
     const llmMessages = [
-      { role: "system" as const, content: getSimpleSystemPrompt(boyfriend) },
+      {
+        role: "system" as const,
+        content: getSystemPrompt(
+          boyfriend,
+          boyfriend.memorySummary,
+          profileFacts
+        ),
+      },
       ...history.map((m) => ({
         role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
         content: m.content,
@@ -68,18 +82,32 @@ export async function POST(request: Request): Promise<Response> {
         try {
           for await (const chunk of client.stream(llmMessages)) {
             fullText += chunk;
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`));
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`)
+            );
           }
 
-          if (fullText.trim()) {
+          const { content, decision } = splitContentAndDecision(fullText);
+
+          if (content) {
             await createMessage(
               {
                 boyfriendId: body.boyfriendId!,
                 role: "boyfriend",
                 type: "text",
-                content: fullText.trim(),
+                content,
+                emotion: decision?.emotion ?? null,
               },
               session.user!.id
+            );
+            await updateBoyfriendPreview(body.boyfriendId!, session.user!.id, content);
+          }
+
+          if (decision) {
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ decision })}\n\n`
+              )
             );
           }
 

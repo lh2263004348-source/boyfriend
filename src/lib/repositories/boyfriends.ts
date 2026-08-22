@@ -87,6 +87,21 @@ export async function deleteBoyfriend(
   return result.length > 0;
 }
 
+export async function updateBoyfriendPreview(
+  id: string,
+  userId: string,
+  preview: string
+): Promise<void> {
+  await db
+    .update(boyfriends)
+    .set({
+      lastMessagePreview: preview.slice(0, 200),
+      lastActiveAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(boyfriends.id, id), eq(boyfriends.userId, userId)));
+}
+
 /** 校验男友归属，不属于当前用户则返回 null */
 export async function assertBoyfriendOwnership(
   boyfriendId: string,

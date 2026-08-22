@@ -31,13 +31,11 @@ export function BoyfriendCard({
             <div className="flex items-center gap-2">
               <h3 className="truncate font-medium text-[var(--color-text-primary)]">
                 {boyfriend.nickname}
+                <span className="text-muted-foreground">·</span>
+                <span style={{ color: modeConfig.color }}>
+                  {modeConfig.label}
+                </span>
               </h3>
-              <span
-                className="shrink-0 rounded-full px-2 py-0.5 text-xs text-white"
-                style={{ backgroundColor: modeConfig.color }}
-              >
-                {modeConfig.label}
-              </span>
             </div>
             <p className="mt-1 truncate text-sm text-muted-foreground">
               {boyfriend.lastMessagePreview ?? "还没有消息，去打个招呼吧"}

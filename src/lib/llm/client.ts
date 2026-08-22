@@ -1,14 +1,3 @@
-import type { Boyfriend } from "@/lib/types";
-
-/** M1 简化版 system prompt，M2 将接入完整关系模式 */
-export function getSimpleSystemPrompt(boyfriend: Boyfriend): string {
-  return `你是${boyfriend.nickname}，用户的虚拟男友。
-称呼用户为"${boyfriend.userNickname}"。
-像真人微信聊天一样回复，保持 1-3 句话的短消息，语气温暖自然。
-当前暧昧值：${boyfriend.intimacy}/100。
-不要输出 markdown，不要使用列表格式。`;
-}
-
 export interface LLMMessage {
   role: "system" | "user" | "assistant";
   content: string;

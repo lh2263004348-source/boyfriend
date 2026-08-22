@@ -1,15 +1,24 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { getDisplayContent } from "@/lib/llm/parser";
+import type { LLMDecision } from "@/lib/types";
 
 const MIN_TYPING_MS = 1500;
+
+export interface StreamResult {
+  content: string;
+  decision: LLMDecision | null;
+}
 
 export interface UseStreamingResult {
   streamingText: string;
   isStreaming: boolean;
   isTyping: boolean;
   error: string | null;
-  sendMessage: (boyfriendId: string, userMessage: string) => Promise<string>;
+  lastDecision: LLMDecision | null;
+  sendMessage: (boyfriendId: string, userMessage: string) => Promise<StreamResult>;
   reset: () => void;
 }
 
@@ -18,18 +27,22 @@ export function useStreaming(): UseStreamingResult {
   const [isStreaming, setIsStreaming] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastDecision, setLastDecision] = useState<LLMDecision | null>(null);
   const startTimeRef = useRef<number>(0);
+  const rawBufferRef = useRef("");
 
   const reset = useCallback((): void => {
     setStreamingText("");
     setIsStreaming(false);
     setIsTyping(false);
     setError(null);
+    rawBufferRef.current = "";
   }, []);
 
   const sendMessage = useCallback(
-    async (boyfriendId: string, userMessage: string): Promise<string> => {
+    async (boyfriendId: string, userMessage: string): Promise<StreamResult> => {
       reset();
+      setLastDecision(null);
       setIsTyping(true);
       startTimeRef.current = Date.now();
 
@@ -55,6 +68,7 @@ export function useStreaming(): UseStreamingResult {
         setIsTyping(false);
         setIsStreaming(true);
         setStreamingText("");
+        rawBufferRef.current = "";
 
         const reader = response.body?.getReader();
         if (!reader) {
@@ -63,7 +77,7 @@ export function useStreaming(): UseStreamingResult {
 
         const decoder = new TextDecoder();
         let buffer = "";
-        let fullText = "";
+        let decision: LLMDecision | null = null;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -82,17 +96,25 @@ export function useStreaming(): UseStreamingResult {
             try {
               const parsed = JSON.parse(data) as {
                 content?: string;
+                decision?: LLMDecision;
                 error?: string;
               };
               if (parsed.error) {
                 throw new Error(parsed.error);
               }
+              if (parsed.decision) {
+                decision = parsed.decision;
+                setLastDecision(parsed.decision);
+              }
               if (parsed.content) {
-                fullText += parsed.content;
-                setStreamingText(fullText);
+                rawBufferRef.current += parsed.content;
+                setStreamingText(getDisplayContent(rawBufferRef.current));
               }
             } catch (parseError) {
-              if (parseError instanceof Error && parseError.message !== "Unexpected end of JSON input") {
+              if (
+                parseError instanceof Error &&
+                parseError.message !== "Unexpected end of JSON input"
+              ) {
                 throw parseError;
               }
             }
@@ -100,7 +122,8 @@ export function useStreaming(): UseStreamingResult {
         }
 
         setIsStreaming(false);
-        return fullText.trim();
+        const content = getDisplayContent(rawBufferRef.current).trim();
+        return { content, decision };
       } catch (err) {
         setIsTyping(false);
         setIsStreaming(false);
@@ -117,6 +140,7 @@ export function useStreaming(): UseStreamingResult {
     isStreaming,
     isTyping,
     error,
+    lastDecision,
     sendMessage,
     reset,
   };

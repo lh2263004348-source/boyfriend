@@ -87,6 +87,17 @@ export interface ApiError {
   code?: string;
 }
 
+/** LLM 媒介决策（M2+） */
+export interface LLMDecision {
+  emotion: "happy" | "sad" | "neutral" | "angry" | "shy" | "heart";
+  preferredMedia: "text" | "voice" | "image";
+  shouldGenerateImage: boolean;
+  imageType: "scene" | "selfie" | "gift" | "share";
+  imagePrompt: string;
+  surpriseTriggered: boolean;
+  surpriseType: "song" | "gift" | "none";
+}
+
 /** Session 用户（Auth.js 扩展） */
 export interface SessionUser {
   id: string;

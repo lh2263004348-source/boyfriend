@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth/config";
-import { assertBoyfriendOwnership } from "@/lib/repositories/boyfriends";
+import { assertBoyfriendOwnership, updateBoyfriendPreview } from "@/lib/repositories/boyfriends";
 import {
   createMessage,
   listMessagesByBoyfriendId,
@@ -103,6 +103,20 @@ export async function POST(request: Request): Promise<NextResponse> {
       return NextResponse.json(
         { error: "男友不存在或无权访问", code: "FORBIDDEN" },
         { status: 403 }
+      );
+    }
+
+    if (body.role === "boyfriend") {
+      await updateBoyfriendPreview(
+        body.boyfriendId,
+        session.user.id,
+        body.content
+      );
+    } else if (body.role === "user") {
+      await updateBoyfriendPreview(
+        body.boyfriendId,
+        session.user.id,
+        body.content
       );
     }
 
