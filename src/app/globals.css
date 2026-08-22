@@ -1,0 +1,76 @@
+@import "tailwindcss";
+@plugin "tailwindcss-animate";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* DESIGN.md tokens */
+  --color-bg-primary: #faf7f2;
+  --color-bg-card: #ffffff;
+  --color-bg-message-self: #ffb5a0;
+  --color-text-primary: #2d2520;
+  --color-text-secondary: #8b7e74;
+  --color-accent-primary: #e8a598;
+  --color-accent-warm: #f4b860;
+  --color-accent-soft: #ffe5dc;
+  --color-mode-dominant: #8b5a4a;
+  --color-mode-puppy: #e8a598;
+  --color-mode-warm: #d4a574;
+  --color-error: #d89b8e;
+}
+
+:root {
+  --radius: 0.75rem;
+  --background: #faf7f2;
+  --foreground: #2d2520;
+  --card: #ffffff;
+  --card-foreground: #2d2520;
+  --popover: #ffffff;
+  --popover-foreground: #2d2520;
+  --primary: #e8a598;
+  --primary-foreground: #ffffff;
+  --secondary: #ffe5dc;
+  --secondary-foreground: #2d2520;
+  --muted: #f5f0ea;
+  --muted-foreground: #8b7e74;
+  --accent: #ffe5dc;
+  --accent-foreground: #2d2520;
+  --destructive: #d89b8e;
+  --border: #e8dfd6;
+  --input: #e8dfd6;
+  --ring: #e8a598;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif;
+  }
+}
