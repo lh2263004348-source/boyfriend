@@ -70,7 +70,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       relationshipMode: body.relationshipMode as RelationshipMode,
       nickname: body.nickname,
       userNickname: body.userNickname,
-      avatarUrl: body.avatarUrl ?? "/avatars/warm.svg",
+      avatarUrl: body.avatarUrl ?? "/avatars/warm.jpg",
     });
 
     return NextResponse.json({ boyfriend }, { status: 201 });

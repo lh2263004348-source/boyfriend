@@ -9,6 +9,7 @@
     "lint": "eslint",
     "db:push": "drizzle-kit push --force",
     "db:migrate": "tsx scripts/migrate.ts",
+    "avatars:generate": "tsx scripts/generate-avatars.ts",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio"
   },
