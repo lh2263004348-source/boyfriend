@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 
 import { BoyfriendCard } from "@/components/boyfriends/BoyfriendCard";
 import { LogoutButton } from "@/components/layout/LogoutButton";
@@ -20,24 +21,28 @@ export function HomeView({
   userName,
   initialBoyfriends,
 }: HomeViewProps): React.ReactElement {
-  const { boyfriends, loading } = useChatState();
+  const { loading } = useChatState();
   const dispatch = useChatDispatch();
+  const router = useRouter();
+  const [removedIds, setRemovedIds] = useState<string[]>([]);
 
   useEffect(() => {
     dispatch({ type: "INIT", boyfriends: initialBoyfriends });
   }, [dispatch, initialBoyfriends]);
 
+  const list = initialBoyfriends.filter((b) => !removedIds.includes(b.id));
+
   const handleDelete = useCallback(
     async (id: string): Promise<void> => {
       const res = await fetch(`/api/boyfriends?id=${id}`, { method: "DELETE" });
       if (res.ok) {
+        setRemovedIds((prev) => [...prev, id]);
         dispatch({ type: "DELETE_BOYFRIEND", boyfriendId: id });
+        router.refresh();
       }
     },
-    [dispatch]
+    [dispatch, router]
   );
-
-  const list = boyfriends.length > 0 ? boyfriends : initialBoyfriends;
 
   return (
     <main className="mx-auto min-h-screen max-w-lg px-4 py-8">

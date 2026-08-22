@@ -6,6 +6,10 @@ import {
   createMessage,
   listMessagesByBoyfriendId,
 } from "@/lib/repositories/messages";
+import type { MessageRole, MessageType } from "@/lib/types";
+
+const USER_ROLES: MessageRole[] = ["user"];
+const USER_TYPES: MessageType[] = ["text", "sticker"];
 
 export async function GET(request: Request): Promise<NextResponse> {
   const session = await auth();
@@ -86,6 +90,23 @@ export async function POST(request: Request): Promise<NextResponse> {
       );
     }
 
+    if (
+      !USER_ROLES.includes(body.role as MessageRole) ||
+      !USER_TYPES.includes(body.type as MessageType)
+    ) {
+      return NextResponse.json(
+        { error: "仅允许写入用户消息", code: "FORBIDDEN" },
+        { status: 403 }
+      );
+    }
+
+    if (body.content.length > 2000) {
+      return NextResponse.json(
+        { error: "消息过长", code: "VALIDATION_ERROR" },
+        { status: 400 }
+      );
+    }
+
     const message = await createMessage(
       {
         boyfriendId: body.boyfriendId,
@@ -106,13 +127,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       );
     }
 
-    if (body.role === "boyfriend") {
-      await updateBoyfriendPreview(
-        body.boyfriendId,
-        session.user.id,
-        body.content
-      );
-    } else if (body.role === "user") {
+    if (body.role === "user") {
       await updateBoyfriendPreview(
         body.boyfriendId,
         session.user.id,

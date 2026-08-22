@@ -15,8 +15,7 @@ import {
 } from "@/components/chat/StreamingText";
 import { useProactive } from "@/hooks/useProactive";
 import { useStreaming } from "@/hooks/useStreaming";
-import { buildRecallMessage } from "@/lib/memory/recall";
-import { getOpeningMessage } from "@/lib/relationship/openings";
+import { useChatDispatch } from "@/components/providers/ChatProvider";
 import type { StickerItem } from "@/lib/stickers/data";
 import { getRelationshipModeConfig } from "@/lib/relationship/config";
 import type { Boyfriend, Message, UserProfileFact } from "@/lib/types";
@@ -32,7 +31,10 @@ export function ChatView({
   initialMessages,
   profileFacts = [],
 }: ChatViewProps): React.ReactElement {
+  const dispatch = useChatDispatch();
   const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [hasMore, setHasMore] = useState(initialMessages.length >= 50);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [intimacy, setIntimacy] = useState(boyfriend.intimacy);
   const [surpriseGift, setSurpriseGift] = useState<{
     name: string;
@@ -42,6 +44,7 @@ export function ChatView({
   const [showNextStage, setShowNextStage] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const openingSentRef = useRef(false);
+  const lastUserTextRef = useRef("");
   const { streamingText, isStreaming, isTyping, error, sendMessage, reset } =
     useStreaming();
 
@@ -63,32 +66,45 @@ export function ChatView({
 
   useEffect(() => {
     if (openingSentRef.current) return;
-    openingSentRef.current = true;
 
-    let content: string | null = null;
+    const recallKey = `recall-sent-${boyfriend.id}`;
+    const openingKey = `opening-sent-${boyfriend.id}`;
+
+    let kind: "opening" | "recall" | null = null;
     if (initialMessages.length === 0) {
-      content = getOpeningMessage(boyfriend.relationshipMode);
+      if (sessionStorage.getItem(openingKey)) return;
+      kind = "opening";
     } else if (profileFacts.length > 0) {
-      content = buildRecallMessage(boyfriend.relationshipMode, profileFacts);
+      if (sessionStorage.getItem(recallKey)) return;
+      kind = "recall";
     }
 
-    if (!content) return;
+    if (!kind) return;
 
-    void fetch("/api/messages", {
+    openingSentRef.current = true;
+
+    void fetch("/api/messages/system", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         boyfriendId: boyfriend.id,
-        role: "boyfriend",
-        type: "text",
-        content,
+        kind,
       }),
     })
       .then((res) => res.json())
       .then((data: { message?: Message }) => {
-        if (data.message) addMessage(data.message);
+        if (data.message) {
+          addMessage(data.message);
+          if (initialMessages.length === 0) {
+            sessionStorage.setItem(openingKey, "1");
+          } else {
+            sessionStorage.setItem(recallKey, "1");
+          }
+        }
       })
-      .catch(() => undefined);
+      .catch(() => {
+        openingSentRef.current = false;
+      });
   }, [
     addMessage,
     boyfriend.id,
@@ -98,17 +114,26 @@ export function ChatView({
   ]);
 
   useEffect(() => {
-    const onLeave = (): void => {
+    const extractKey = `extract-at-${boyfriend.id}`;
+    const payload = JSON.stringify({ boyfriendId: boyfriend.id });
+
+    const sendExtractBeacon = (): void => {
+      const last = sessionStorage.getItem(extractKey);
+      if (last && Date.now() - Number(last) < 30_000) return;
+      sessionStorage.setItem(extractKey, String(Date.now()));
       navigator.sendBeacon(
         "/api/memory/extract",
-        new Blob(
-          [JSON.stringify({ boyfriendId: boyfriend.id })],
-          { type: "application/json" }
-        )
+        new Blob([payload], { type: "application/json" })
       );
     };
-    window.addEventListener("beforeunload", onLeave);
-    return () => window.removeEventListener("beforeunload", onLeave);
+
+    const onBeforeUnload = (): void => sendExtractBeacon();
+
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      sendExtractBeacon();
+    };
   }, [boyfriend.id]);
 
   useEffect(() => {
@@ -120,8 +145,54 @@ export function ChatView({
       `/api/messages?boyfriendId=${boyfriend.id}&limit=50`
     );
     const data = (await res.json()) as { messages?: Message[] };
-    if (data.messages) setMessages(data.messages);
+    if (data.messages) {
+      setMessages(data.messages);
+      setHasMore(data.messages.length >= 50);
+    }
   }, [boyfriend.id]);
+
+  const pollVoiceMessage = useCallback(
+    async (messageId: string): Promise<void> => {
+      for (let i = 0; i < 8; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const res = await fetch(
+          `/api/messages?boyfriendId=${boyfriend.id}&limit=50`
+        );
+        const data = (await res.json()) as { messages?: Message[] };
+        const target = data.messages?.find((m) => m.id === messageId);
+        if (target?.type === "voice" && target.mediaKey) {
+          if (data.messages) setMessages(data.messages);
+          return;
+        }
+      }
+      await reloadMessages();
+    },
+    [boyfriend.id, reloadMessages]
+  );
+
+  const loadOlderMessages = useCallback(async (): Promise<void> => {
+    const oldest = messages[0];
+    if (!oldest || loadingMore) return;
+
+    setLoadingMore(true);
+    try {
+      const cursor = encodeURIComponent(
+        new Date(oldest.createdAt).toISOString()
+      );
+      const res = await fetch(
+        `/api/messages?boyfriendId=${boyfriend.id}&limit=50&cursor=${cursor}`
+      );
+      const data = (await res.json()) as { messages?: Message[] };
+      if (data.messages && data.messages.length > 0) {
+        setMessages((prev) => [...data.messages!, ...prev]);
+        setHasMore(data.messages.length >= 50);
+      } else {
+        setHasMore(false);
+      }
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [boyfriend.id, loadingMore, messages]);
 
   const handleSend = useCallback(
     async (text: string): Promise<void> => {
@@ -137,13 +208,24 @@ export function ChatView({
         createdAt: new Date(),
       };
       setMessages((prev) => [...prev, tempUserMessage]);
+      lastUserTextRef.current = text;
 
       try {
         const result = await sendMessage(boyfriend.id, text);
         reset();
 
+        sessionStorage.setItem(
+          `extract-at-${boyfriend.id}`,
+          String(Date.now())
+        );
+
         if (result.meta) {
-          setIntimacy(result.meta.intimacy);
+          const nextIntimacy = result.meta.intimacy;
+          setIntimacy(nextIntimacy);
+          dispatch({
+            type: "UPDATE_BOYFRIEND",
+            boyfriend: { ...boyfriend, intimacy: nextIntimacy },
+          });
           if (result.meta.showNextStage) setShowNextStage(true);
           if (
             result.meta.surprise?.type === "gift" &&
@@ -156,6 +238,12 @@ export function ChatView({
               image: result.meta.surprise.giftImage,
               meaning: result.meta.surprise.giftMeaning,
             });
+          }
+          if (
+            result.meta.surprise?.type === "song" &&
+            result.meta.surprise.messageId
+          ) {
+            void pollVoiceMessage(result.meta.surprise.messageId);
           }
         }
 
@@ -187,6 +275,7 @@ export function ChatView({
               prompt: result.decision.imagePrompt,
               imageType: result.decision.imageType ?? "scene",
               caption: "给你看一张图~",
+              userMessage: lastUserTextRef.current,
             }),
           })
             .then(async (res) => {
@@ -212,26 +301,47 @@ export function ChatView({
         setMessages((prev) => prev.filter((m) => m.id !== tempUserMessage.id));
       }
     },
-    [boyfriend.id, reloadMessages, reset, sendMessage]
+    [boyfriend, dispatch, pollVoiceMessage, reloadMessages, reset, sendMessage]
   );
 
   const handleSendSticker = useCallback(
     async (sticker: StickerItem): Promise<void> => {
-      const res = await fetch("/api/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          boyfriendId: boyfriend.id,
-          role: "user",
-          type: "sticker",
-          content: sticker.id,
-          emotion: sticker.emotion,
-        }),
-      });
-      const data = (await res.json()) as { message?: Message };
-      if (data.message) addMessage(data.message);
+      const tempUserMessage: Message = {
+        id: `temp-sticker-${Date.now()}`,
+        boyfriendId: boyfriend.id,
+        role: "user",
+        type: "sticker",
+        content: sticker.id,
+        mediaKey: null,
+        emotion: sticker.emotion,
+        isSurprise: false,
+        createdAt: new Date(),
+      };
+      setMessages((prev) => [...prev, tempUserMessage]);
+
+      try {
+        const result = await sendMessage(boyfriend.id, "", {
+          stickerId: sticker.id,
+        });
+        reset();
+
+        if (result.meta) {
+          const nextIntimacy = result.meta.intimacy;
+          setIntimacy(nextIntimacy);
+          dispatch({
+            type: "UPDATE_BOYFRIEND",
+            boyfriend: { ...boyfriend, intimacy: nextIntimacy },
+          });
+        }
+
+        await reloadMessages();
+      } catch {
+        setMessages((prev) =>
+          prev.filter((m) => m.id !== tempUserMessage.id)
+        );
+      }
     },
-    [addMessage, boyfriend.id]
+    [boyfriend, dispatch, reloadMessages, reset, sendMessage]
   );
 
   return (
@@ -266,6 +376,16 @@ export function ChatView({
 
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto px-4 py-4">
+          {hasMore ? (
+            <button
+              type="button"
+              onClick={() => void loadOlderMessages()}
+              disabled={loadingMore}
+              className="mb-4 w-full rounded-xl py-2 text-sm text-muted-foreground hover:bg-white/60"
+            >
+              {loadingMore ? "加载中…" : "加载更早的消息"}
+            </button>
+          ) : null}
           {messages.map((message) => (
             <MessageBubble key={message.id} message={message} />
           ))}

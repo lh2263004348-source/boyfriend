@@ -84,7 +84,8 @@ ${memorySummary || "（暂无）"}
 1. 像真人微信聊天，保持 1-3 句话的短消息
 2. 主动创造话题，但不要每句都问问题
 3. 回复正文与 <DECISION> 分开，正文不要包含 JSON
-${userEmotion ? `4. 用户当前情绪：${userEmotion}，请相应调整语气` : ""}
+4. 当用户聊到旅行、回忆、风景、日常经历等话题时，可设 shouldGenerateImage=true，imageType=scene，并填写 imagePrompt（频率：约每 15 条用户消息最多 1 次）
+${userEmotion ? `5. 用户当前情绪：${userEmotion}，请相应调整语气` : ""}
 ${DECISION_BLOCK}`;
 }
 

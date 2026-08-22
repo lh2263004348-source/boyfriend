@@ -13,6 +13,7 @@ export type ChatAction =
   | { type: "INIT"; boyfriends: Boyfriend[] }
   | { type: "SET_LOADING"; loading: boolean }
   | { type: "ADD_BOYFRIEND"; boyfriend: Boyfriend }
+  | { type: "UPDATE_BOYFRIEND"; boyfriend: Boyfriend }
   | { type: "DELETE_BOYFRIEND"; boyfriendId: string }
   | { type: "SET_MESSAGES"; boyfriendId: string; messages: Message[] }
   | { type: "ADD_MESSAGE"; boyfriendId: string; message: Message }
@@ -43,6 +44,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           ...state.messagesByBoyfriend,
           [action.boyfriend.id]: [],
         },
+      };
+    case "UPDATE_BOYFRIEND":
+      return {
+        ...state,
+        boyfriends: state.boyfriends.map((b) =>
+          b.id === action.boyfriend.id ? action.boyfriend : b
+        ),
       };
     case "DELETE_BOYFRIEND": {
       const { [action.boyfriendId]: _, ...rest } = state.messagesByBoyfriend;

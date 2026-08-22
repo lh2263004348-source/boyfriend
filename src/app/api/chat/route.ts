@@ -1,3 +1,5 @@
+import { after } from "next/server";
+
 import { auth } from "@/lib/auth/config";
 import { detectEmotion } from "@/lib/emotion/detector";
 import { extractProfileFacts } from "@/lib/memory/extractor";
@@ -12,6 +14,8 @@ import {
   updateBoyfriendPreview,
 } from "@/lib/repositories/boyfriends";
 import {
+  countUserMessagesByBoyfriendId,
+  countUserMessagesSince,
   createMessage,
   listMessagesByBoyfriendId,
 } from "@/lib/repositories/messages";
@@ -20,8 +24,10 @@ import {
   tryTriggerSurprise,
   type SurprisePayload,
 } from "@/lib/surprise/trigger";
-import { synthesizeSpeech } from "@/lib/tts/client";
-import { getStickersByEmotion } from "@/lib/stickers/data";
+import { getStickerById, getStickersByEmotion } from "@/lib/stickers/data";
+import { attachVoiceToMessage } from "@/lib/tts/attachVoice";
+
+const MAX_USER_MESSAGE_LENGTH = 2000;
 
 export async function POST(request: Request): Promise<Response> {
   const session = await auth();
@@ -29,23 +35,40 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "请先登录", code: "UNAUTHORIZED" }, { status: 401 });
   }
 
+  const userId = session.user.id;
+
   try {
     const body = (await request.json()) as {
       boyfriendId?: string;
       userMessage?: string;
+      stickerId?: string;
     };
 
-    if (!body.boyfriendId || !body.userMessage?.trim()) {
+    if (!body.boyfriendId) {
       return Response.json(
         { error: "缺少必填字段", code: "VALIDATION_ERROR" },
         { status: 400 }
       );
     }
 
-    let boyfriend = await assertBoyfriendOwnership(
-      body.boyfriendId,
-      session.user.id
-    );
+    const hasText = !!body.userMessage?.trim();
+    const hasSticker = !!body.stickerId?.trim();
+
+    if (!hasText && !hasSticker) {
+      return Response.json(
+        { error: "缺少必填字段", code: "VALIDATION_ERROR" },
+        { status: 400 }
+      );
+    }
+
+    if (hasText && body.userMessage!.trim().length > MAX_USER_MESSAGE_LENGTH) {
+      return Response.json(
+        { error: "消息过长", code: "VALIDATION_ERROR" },
+        { status: 400 }
+      );
+    }
+
+    let boyfriend = await assertBoyfriendOwnership(body.boyfriendId, userId);
     if (!boyfriend) {
       return Response.json(
         { error: "男友不存在或无权访问", code: "FORBIDDEN" },
@@ -53,37 +76,70 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const userMessage = body.userMessage.trim();
-    const userEmotion = detectEmotion(userMessage);
+    let userEmotion: string | null = null;
+    let llmUserContent = "";
+
+    if (hasSticker) {
+      const sticker = getStickerById(body.stickerId!.trim());
+      if (!sticker) {
+        return Response.json(
+          { error: "无效的表情包", code: "VALIDATION_ERROR" },
+          { status: 400 }
+        );
+      }
+
+      await createMessage(
+        {
+          boyfriendId: body.boyfriendId,
+          role: "user",
+          type: "sticker",
+          content: sticker.id,
+          emotion: sticker.emotion,
+        },
+        userId
+      );
+
+      userEmotion = sticker.emotion;
+      llmUserContent = `用户发送了表情包：${sticker.emoji}`;
+      await updateBoyfriendPreview(body.boyfriendId, userId, sticker.emoji);
+    } else {
+      const userMessage = body.userMessage!.trim();
+      userEmotion = detectEmotion(userMessage);
+      llmUserContent = userMessage;
+
+      await createMessage(
+        {
+          boyfriendId: body.boyfriendId,
+          role: "user",
+          type: "text",
+          content: userMessage,
+          emotion: userEmotion,
+        },
+        userId
+      );
+
+      await updateBoyfriendPreview(body.boyfriendId, userId, userMessage);
+    }
+
     const prevIntimacy = boyfriend.intimacy;
     const showNextStage = prevIntimacy === 99;
 
-    await createMessage(
-      {
-        boyfriendId: body.boyfriendId,
-        role: "user",
-        type: "text",
-        content: userMessage,
-        emotion: userEmotion,
-      },
-      session.user.id
-    );
-
     boyfriend =
-      (await incrementIntimacy(body.boyfriendId, session.user.id)) ?? boyfriend;
-    await updateBoyfriendPreview(body.boyfriendId, session.user.id, userMessage);
+      (await incrementIntimacy(body.boyfriendId, userId)) ?? boyfriend;
 
-    const [history, profileFacts] = await Promise.all([
-      listMessagesByBoyfriendId(body.boyfriendId, session.user.id, { limit: 20 }),
-      listProfileFactsByBoyfriendId(body.boyfriendId, session.user.id),
+    const [history, profileFacts, surpriseMessagesSince] = await Promise.all([
+      listMessagesByBoyfriendId(body.boyfriendId, userId, { limit: 20 }),
+      listProfileFactsByBoyfriendId(body.boyfriendId, userId),
+      boyfriend.lastSurpriseAt
+        ? countUserMessagesSince(
+            body.boyfriendId,
+            userId,
+            boyfriend.lastSurpriseAt
+          )
+        : countUserMessagesByBoyfriendId(body.boyfriendId, userId),
     ]);
 
     const lastUserMsg = history.filter((m) => m.role === "user").at(-1);
-    const surpriseMessagesSince = boyfriend.lastSurpriseAt
-      ? history.filter(
-          (m) => m.createdAt > boyfriend!.lastSurpriseAt! && m.role === "user"
-        ).length
-      : history.filter((m) => m.role === "user").length;
 
     let surprisePayload: SurprisePayload | null = null;
 
@@ -98,10 +154,16 @@ export async function POST(request: Request): Promise<Response> {
           userEmotion
         ),
       },
-      ...history.map((m) => ({
-        role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
-        content: m.content,
-      })),
+      ...history.map((m, idx) => {
+        const isLastUser =
+          idx === history.length - 1 && m.role === "user" && hasSticker;
+        return {
+          role: (m.role === "user" ? "user" : "assistant") as
+            | "user"
+            | "assistant",
+          content: isLastUser ? llmUserContent : m.content,
+        };
+      }),
     ];
 
     const client = createLLMClient();
@@ -129,9 +191,9 @@ export async function POST(request: Request): Promise<Response> {
                 content,
                 emotion: decision?.emotion ?? null,
               },
-              session.user!.id
+              userId
             );
-            await updateBoyfriendPreview(body.boyfriendId!, session.user!.id, content);
+            await updateBoyfriendPreview(body.boyfriendId!, userId, content);
           }
 
           if (decision?.sendSticker) {
@@ -147,7 +209,7 @@ export async function POST(request: Request): Promise<Response> {
                   content: sticker.id,
                   emotion,
                 },
-                session.user!.id
+                userId
               );
             }
           }
@@ -169,11 +231,10 @@ export async function POST(request: Request): Promise<Response> {
 
           if (surprisePayload) {
             boyfriend =
-              (await recordSurprise(body.boyfriendId!, session.user!.id)) ??
-              boyfriend;
+              (await recordSurprise(body.boyfriendId!, userId)) ?? boyfriend;
 
             if (surprisePayload.type === "gift") {
-              await createMessage(
+              const giftMessage = await createMessage(
                 {
                   boyfriendId: body.boyfriendId!,
                   role: "boyfriend",
@@ -182,31 +243,42 @@ export async function POST(request: Request): Promise<Response> {
                   mediaKey: surprisePayload.giftImage ?? null,
                   isSurprise: true,
                 },
-                session.user!.id
+                userId
               );
-            } else {
-              let audioUrl: string | null = null;
-              try {
-                const tts = await synthesizeSpeech({
-                  text: surprisePayload.songLyrics ?? "",
-                  mode: boyfriend!.relationshipMode,
-                });
-                audioUrl = tts.audioUrl;
-              } catch {
-                // TTS 失败降级为文字
+              if (giftMessage) {
+                surprisePayload = {
+                  ...surprisePayload,
+                  messageId: giftMessage.id,
+                };
               }
-
-              await createMessage(
+            } else {
+              const songMessage = await createMessage(
                 {
                   boyfriendId: body.boyfriendId!,
                   role: "boyfriend",
-                  type: audioUrl ? "voice" : "text",
+                  type: "text",
                   content: `🎵 ${surprisePayload.songTitle}\n${surprisePayload.songLyrics}`,
-                  mediaKey: audioUrl,
                   isSurprise: true,
                 },
-                session.user!.id
+                userId
               );
+
+              if (songMessage) {
+                surprisePayload = {
+                  ...surprisePayload,
+                  messageId: songMessage.id,
+                };
+
+                after(async () => {
+                  await attachVoiceToMessage(
+                    songMessage.id,
+                    body.boyfriendId!,
+                    userId,
+                    surprisePayload!.songLyrics ?? "",
+                    boyfriend!.relationshipMode
+                  );
+                });
+              }
             }
           }
 
@@ -225,21 +297,15 @@ export async function POST(request: Request): Promise<Response> {
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           controller.close();
 
-          const finalMessages = await listMessagesByBoyfriendId(
-            body.boyfriendId!,
-            session.user!.id,
-            { limit: 30 }
-          );
-          void extractProfileFacts(
-            body.boyfriendId!,
-            session.user!.id,
-            finalMessages.slice(-6)
-          );
-          void maybeSummarize(
-            body.boyfriendId!,
-            session.user!.id,
-            finalMessages
-          );
+          after(async () => {
+            const recent = await listMessagesByBoyfriendId(
+              body.boyfriendId!,
+              userId,
+              { limit: 6 }
+            );
+            await extractProfileFacts(body.boyfriendId!, userId, recent);
+            await maybeSummarize(body.boyfriendId!, userId);
+          });
         } catch (error) {
           console.error("Chat stream error:", error);
           controller.enqueue(

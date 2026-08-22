@@ -17,6 +17,7 @@ export interface SurprisePayload {
   songTitle?: string;
   songLyrics?: string;
   audioUrl?: string;
+  messageId?: string;
 }
 
 const GIFT_POOL = [

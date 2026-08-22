@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { memorySummaries } from "@/lib/db/schema";
 import { createLLMClient } from "@/lib/llm/client";
 import { updateBoyfriend } from "@/lib/repositories/boyfriends";
+import { countUserMessagesByBoyfriendId, listMessagesByBoyfriendId } from "@/lib/repositories/messages";
 import type { Message } from "@/lib/types";
 
 const SUMMARY_PROMPT = `请用 2-3 句话总结以下对话的关键内容（话题、情绪、重要信息），中文，不要列表。`;
@@ -62,11 +63,13 @@ export async function summarizeConversation(
 
 export async function maybeSummarize(
   boyfriendId: string,
-  userId: string,
-  messages: Message[]
+  userId: string
 ): Promise<void> {
-  const userCount = messages.filter((m) => m.role === "user").length;
+  const userCount = await countUserMessagesByBoyfriendId(boyfriendId, userId);
   if (userCount > 0 && userCount % 10 === 0) {
+    const messages = await listMessagesByBoyfriendId(boyfriendId, userId, {
+      limit: 20,
+    });
     await summarizeConversation(boyfriendId, userId, messages);
   }
 }

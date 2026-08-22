@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef } from "react";
 
 import {
-  pickProactiveMessage,
   type ProactiveTrigger,
 } from "@/lib/relationship/openings";
 import type { Message, RelationshipMode } from "@/lib/types";
@@ -23,16 +22,15 @@ interface UseProactiveOptions {
 
 async function saveProactiveMessage(
   boyfriendId: string,
-  content: string
+  trigger: ProactiveTrigger
 ): Promise<Message | null> {
-  const res = await fetch("/api/messages", {
+  const res = await fetch("/api/messages/system", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       boyfriendId,
-      role: "boyfriend",
-      type: "text",
-      content,
+      kind: "proactive",
+      trigger,
     }),
   });
   if (!res.ok) return null;
@@ -64,8 +62,7 @@ export function useProactive({
       const now = Date.now();
       if (now - lastProactiveRef.current < MIN_INTERVAL_MS) return;
 
-      const content = pickProactiveMessage(relationshipMode, trigger);
-      const message = await saveProactiveMessage(boyfriendId, content);
+      const message = await saveProactiveMessage(boyfriendId, trigger);
       if (message) {
         lastProactiveRef.current = now;
         sessionCountRef.current += 1;

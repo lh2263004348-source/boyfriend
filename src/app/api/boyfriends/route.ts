@@ -7,6 +7,9 @@ import {
   getBoyfriendById,
   listBoyfriendsByUserId,
 } from "@/lib/repositories/boyfriends";
+import type { RelationshipMode } from "@/lib/types";
+
+const VALID_MODES: RelationshipMode[] = ["dominant", "puppy", "warm"];
 
 export async function GET(): Promise<NextResponse> {
   const session = await auth();
@@ -53,12 +56,19 @@ export async function POST(request: Request): Promise<NextResponse> {
       );
     }
 
+    if (!VALID_MODES.includes(body.relationshipMode as RelationshipMode)) {
+      return NextResponse.json(
+        { error: "无效的关系模式", code: "VALIDATION_ERROR" },
+        { status: 400 }
+      );
+    }
+
     const boyfriend = await createBoyfriend({
       userId: session.user.id,
-      relationshipMode: body.relationshipMode,
+      relationshipMode: body.relationshipMode as RelationshipMode,
       nickname: body.nickname,
       userNickname: body.userNickname,
-      avatarUrl: body.avatarUrl ?? "/avatars/default.png",
+      avatarUrl: body.avatarUrl ?? "/avatars/warm.svg",
     });
 
     return NextResponse.json({ boyfriend }, { status: 201 });

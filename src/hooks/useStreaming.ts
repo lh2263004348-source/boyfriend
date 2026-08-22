@@ -26,7 +26,11 @@ export interface UseStreamingResult {
   isTyping: boolean;
   error: string | null;
   lastDecision: LLMDecision | null;
-  sendMessage: (boyfriendId: string, userMessage: string) => Promise<StreamResult>;
+  sendMessage: (
+    boyfriendId: string,
+    userMessage: string,
+    options?: { stickerId?: string }
+  ) => Promise<StreamResult>;
   reset: () => void;
 }
 
@@ -48,7 +52,11 @@ export function useStreaming(): UseStreamingResult {
   }, []);
 
   const sendMessage = useCallback(
-    async (boyfriendId: string, userMessage: string): Promise<StreamResult> => {
+    async (
+      boyfriendId: string,
+      userMessage: string,
+      options?: { stickerId?: string }
+    ): Promise<StreamResult> => {
       reset();
       setLastDecision(null);
       setIsTyping(true);
@@ -58,7 +66,11 @@ export function useStreaming(): UseStreamingResult {
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ boyfriendId, userMessage }),
+          body: JSON.stringify({
+            boyfriendId,
+            userMessage: userMessage || undefined,
+            stickerId: options?.stickerId,
+          }),
         });
 
         if (!response.ok) {

@@ -1,4 +1,4 @@
-import { and, desc, eq, lt } from "drizzle-orm";
+import { and, desc, eq, gt, lt, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import {
@@ -7,6 +7,7 @@ import {
   type NewDbMessage,
 } from "@/lib/db/schema";
 import { assertBoyfriendOwnership } from "@/lib/repositories/boyfriends";
+import { resolveMediaUrl } from "@/lib/storage/mediaUrl";
 import type { Message, MessageRole, MessageType } from "@/lib/types";
 
 function mapMessage(row: DbMessage): Message {
@@ -16,7 +17,7 @@ function mapMessage(row: DbMessage): Message {
     role: row.role as MessageRole,
     type: row.type as MessageType,
     content: row.content,
-    mediaKey: row.mediaKey,
+    mediaKey: resolveMediaUrl(row.mediaKey),
     emotion: row.emotion,
     isSurprise: row.isSurprise,
     createdAt: row.createdAt,
@@ -86,6 +87,65 @@ export async function createMessage(
 
   const [row] = await db.insert(messages).values(data).returning();
   return mapMessage(row);
+}
+
+export async function countUserMessagesByBoyfriendId(
+  boyfriendId: string,
+  userId: string
+): Promise<number> {
+  const boyfriend = await assertBoyfriendOwnership(boyfriendId, userId);
+  if (!boyfriend) return 0;
+
+  const [result] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(messages)
+    .where(
+      and(eq(messages.boyfriendId, boyfriendId), eq(messages.role, "user"))
+    );
+
+  return result?.count ?? 0;
+}
+
+export async function countUserMessagesSince(
+  boyfriendId: string,
+  userId: string,
+  since: Date
+): Promise<number> {
+  const boyfriend = await assertBoyfriendOwnership(boyfriendId, userId);
+  if (!boyfriend) return 0;
+
+  const [result] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.boyfriendId, boyfriendId),
+        eq(messages.role, "user"),
+        gt(messages.createdAt, since)
+      )
+    );
+
+  return result?.count ?? 0;
+}
+
+export async function updateMessageMedia(
+  messageId: string,
+  userId: string,
+  data: { mediaKey: string; type?: MessageType }
+): Promise<Message | null> {
+  const existing = await getMessageById(messageId, userId);
+  if (!existing) return null;
+
+  const [row] = await db
+    .update(messages)
+    .set({
+      mediaKey: data.mediaKey,
+      ...(data.type ? { type: data.type } : {}),
+    })
+    .where(eq(messages.id, messageId))
+    .returning();
+
+  return row ? mapMessage(row) : null;
 }
 
 export async function deleteMessagesByBoyfriendId(

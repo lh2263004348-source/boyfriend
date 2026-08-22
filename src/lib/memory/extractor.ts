@@ -1,6 +1,9 @@
 import { createLLMClient } from "@/lib/llm/client";
 import { isValidFactKey } from "@/lib/memory/profileKeys";
-import { upsertProfileFact } from "@/lib/repositories/profileFacts";
+import {
+  getProfileFactByKey,
+  upsertProfileFact,
+} from "@/lib/repositories/profileFacts";
 import type { Message } from "@/lib/types";
 
 const EXTRACT_PROMPT = `分析以下对话，判断用户是否透露了新的个人信息。
@@ -16,6 +19,27 @@ const EXTRACT_PROMPT = `分析以下对话，判断用户是否透露了新的�
 interface ExtractResult {
   facts: Array<{ key: string; value: string }>;
   updates: Array<{ key: string; value: string; action?: string }>;
+}
+
+const MERGE_KEYS = new Set(["hobbies", "dislikes"]);
+
+async function resolveFactValue(
+  boyfriendId: string,
+  userId: string,
+  key: string,
+  value: string,
+  action?: string
+): Promise<string> {
+  if (action !== "merge" || !MERGE_KEYS.has(key)) {
+    return value;
+  }
+
+  const existing = await getProfileFactByKey(boyfriendId, key, userId);
+  if (!existing?.factValue) return value;
+
+  const parts = existing.factValue.split(/[、,，]/).map((s) => s.trim());
+  if (parts.includes(value.trim())) return existing.factValue;
+  return `${existing.factValue}、${value.trim()}`;
 }
 
 export async function extractProfileFacts(
@@ -61,11 +85,18 @@ export async function extractProfileFacts(
 
     for (const update of result.updates ?? []) {
       if (!isValidFactKey(update.key) || !update.value) continue;
+      const factValue = await resolveFactValue(
+        boyfriendId,
+        userId,
+        update.key,
+        update.value,
+        update.action
+      );
       await upsertProfileFact(
         {
           boyfriendId,
           factKey: update.key,
-          factValue: update.value,
+          factValue,
           sourceMessageId: sourceMessageId ?? null,
         },
         userId

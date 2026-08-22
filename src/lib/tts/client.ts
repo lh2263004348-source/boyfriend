@@ -44,7 +44,15 @@ async function collectStreamAudio(response: Response): Promise<Buffer> {
 
   while (!finished) {
     const { done, value } = await reader.read();
-    if (done) break;
+    if (done) {
+      if (!finished && audioChunks.length === 0) {
+        throw new Error("TTS stream ended without audio data");
+      }
+      if (!finished && audioChunks.length > 0) {
+        throw new Error("TTS stream ended before completion signal");
+      }
+      break;
+    }
 
     lineBuffer += decoder.decode(value, { stream: true });
     const lines = lineBuffer.split("\n");

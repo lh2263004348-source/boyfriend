@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth/config";
 import { createImageClient } from "@/lib/image/client";
+import { canGenerateImageType } from "@/lib/image/frequency";
+import { matchesSceneKeyword } from "@/lib/image/sceneKeywords";
 import { assertBoyfriendOwnership } from "@/lib/repositories/boyfriends";
 import { createMessage } from "@/lib/repositories/messages";
 import { uploadToR2 } from "@/lib/storage/r2";
@@ -18,6 +20,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       prompt?: string;
       imageType?: string;
       caption?: string;
+      userMessage?: string;
     };
 
     if (!body.boyfriendId || !body.prompt?.trim()) {
@@ -32,10 +35,35 @@ export async function POST(request: Request): Promise<NextResponse> {
       return NextResponse.json({ error: "无权访问" }, { status: 403 });
     }
 
+    const imageType = body.imageType ?? "scene";
+
+    const freq = await canGenerateImageType(
+      body.boyfriendId,
+      session.user.id,
+      imageType
+    );
+    if (!freq.allowed) {
+      return NextResponse.json(
+        { error: freq.reason ?? "图像频率限制", degraded: true },
+        { status: 200 }
+      );
+    }
+
+    if (
+      imageType === "scene" &&
+      body.userMessage &&
+      !matchesSceneKeyword(body.userMessage)
+    ) {
+      return NextResponse.json(
+        { error: "当前话题未命中场景图关键词", degraded: true },
+        { status: 200 }
+      );
+    }
+
     const imageClient = createImageClient();
     const result = await imageClient.generate({
       prompt: body.prompt.trim(),
-      imageType: body.imageType ?? "scene",
+      imageType,
     });
 
     if (!result.success || !result.imageUrl) {
@@ -54,7 +82,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
 
     const buffer = Buffer.from(await imageResponse.arrayBuffer());
-    const fileName = `chat-images/${body.imageType ?? "scene"}_${Date.now()}.png`;
+    const fileName = `chat-images/${imageType}_${Date.now()}.png`;
     const { fileKey, url } = await uploadToR2(buffer, fileName, "image/png");
 
     const message = await createMessage(
@@ -63,7 +91,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         role: "boyfriend",
         type: "image",
         content: body.caption?.trim() || "给你看一张图~",
-        mediaKey: url,
+        mediaKey: fileKey,
       },
       session.user.id
     );
