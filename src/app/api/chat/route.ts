@@ -1,5 +1,7 @@
 import { auth } from "@/lib/auth/config";
 import { detectEmotion } from "@/lib/emotion/detector";
+import { extractProfileFacts } from "@/lib/memory/extractor";
+import { maybeSummarize } from "@/lib/memory/summarizer";
 import { createLLMClient } from "@/lib/llm/client";
 import { splitContentAndDecision } from "@/lib/llm/parser";
 import { getSystemPrompt } from "@/lib/llm/prompts";
@@ -222,6 +224,22 @@ export async function POST(request: Request): Promise<Response> {
 
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           controller.close();
+
+          const finalMessages = await listMessagesByBoyfriendId(
+            body.boyfriendId!,
+            session.user!.id,
+            { limit: 30 }
+          );
+          void extractProfileFacts(
+            body.boyfriendId!,
+            session.user!.id,
+            finalMessages.slice(-6)
+          );
+          void maybeSummarize(
+            body.boyfriendId!,
+            session.user!.id,
+            finalMessages
+          );
         } catch (error) {
           console.error("Chat stream error:", error);
           controller.enqueue(

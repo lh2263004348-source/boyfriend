@@ -15,19 +15,22 @@ import {
 } from "@/components/chat/StreamingText";
 import { useProactive } from "@/hooks/useProactive";
 import { useStreaming } from "@/hooks/useStreaming";
+import { buildRecallMessage } from "@/lib/memory/recall";
 import { getOpeningMessage } from "@/lib/relationship/openings";
-import { getRelationshipModeConfig } from "@/lib/relationship/config";
 import type { StickerItem } from "@/lib/stickers/data";
-import type { Boyfriend, Message } from "@/lib/types";
+import { getRelationshipModeConfig } from "@/lib/relationship/config";
+import type { Boyfriend, Message, UserProfileFact } from "@/lib/types";
 
 interface ChatViewProps {
   boyfriend: Boyfriend;
   initialMessages: Message[];
+  profileFacts?: UserProfileFact[];
 }
 
 export function ChatView({
   boyfriend,
   initialMessages,
+  profileFacts = [],
 }: ChatViewProps): React.ReactElement {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [intimacy, setIntimacy] = useState(boyfriend.intimacy);
@@ -38,7 +41,7 @@ export function ChatView({
   } | null>(null);
   const [showNextStage, setShowNextStage] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const openingSentRef = useRef(initialMessages.length > 0);
+  const openingSentRef = useRef(false);
   const { streamingText, isStreaming, isTyping, error, sendMessage, reset } =
     useStreaming();
 
@@ -62,7 +65,15 @@ export function ChatView({
     if (openingSentRef.current) return;
     openingSentRef.current = true;
 
-    const content = getOpeningMessage(boyfriend.relationshipMode);
+    let content: string | null = null;
+    if (initialMessages.length === 0) {
+      content = getOpeningMessage(boyfriend.relationshipMode);
+    } else if (profileFacts.length > 0) {
+      content = buildRecallMessage(boyfriend.relationshipMode, profileFacts);
+    }
+
+    if (!content) return;
+
     void fetch("/api/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -78,7 +89,27 @@ export function ChatView({
         if (data.message) addMessage(data.message);
       })
       .catch(() => undefined);
-  }, [addMessage, boyfriend.id, boyfriend.relationshipMode]);
+  }, [
+    addMessage,
+    boyfriend.id,
+    boyfriend.relationshipMode,
+    initialMessages.length,
+    profileFacts,
+  ]);
+
+  useEffect(() => {
+    const onLeave = (): void => {
+      navigator.sendBeacon(
+        "/api/memory/extract",
+        new Blob(
+          [JSON.stringify({ boyfriendId: boyfriend.id })],
+          { type: "application/json" }
+        )
+      );
+    };
+    window.addEventListener("beforeunload", onLeave);
+    return () => window.removeEventListener("beforeunload", onLeave);
+  }, [boyfriend.id]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -129,6 +160,54 @@ export function ChatView({
         }
 
         await reloadMessages();
+
+        if (
+          result.decision?.shouldGenerateImage &&
+          result.decision.imagePrompt?.trim()
+        ) {
+          const pendingId = `pending-image-${Date.now()}`;
+          const pendingMessage: Message = {
+            id: pendingId,
+            boyfriendId: boyfriend.id,
+            role: "boyfriend",
+            type: "image",
+            content: "给你看一张图~",
+            mediaKey: null,
+            emotion: result.decision.emotion ?? null,
+            isSurprise: false,
+            createdAt: new Date(),
+          };
+          setMessages((prev) => [...prev, pendingMessage]);
+
+          void fetch("/api/image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              boyfriendId: boyfriend.id,
+              prompt: result.decision.imagePrompt,
+              imageType: result.decision.imageType ?? "scene",
+              caption: "给你看一张图~",
+            }),
+          })
+            .then(async (res) => {
+              const data = (await res.json()) as {
+                message?: Message;
+                degraded?: boolean;
+              };
+              if (data.message) {
+                setMessages((prev) =>
+                  prev
+                    .filter((m) => m.id !== pendingId)
+                    .concat(data.message!)
+                );
+              } else {
+                setMessages((prev) => prev.filter((m) => m.id !== pendingId));
+              }
+            })
+            .catch(() => {
+              setMessages((prev) => prev.filter((m) => m.id !== pendingId));
+            });
+        }
       } catch {
         setMessages((prev) => prev.filter((m) => m.id !== tempUserMessage.id));
       }
