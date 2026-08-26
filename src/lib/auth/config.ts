@@ -106,16 +106,23 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.email = authUser.email;
         token.displayName = authUser.displayName;
         token.sessionToken = authUser.sessionToken;
+        // 刚写入的 session 不必立刻回库校验，避免 Neon 抖动直接打成 JWTSessionError
+        return token;
       }
 
       if (token.sessionToken) {
-        const dbUser = await validateSession(token.sessionToken as string);
-        if (!dbUser) {
-          return { ...token, id: undefined };
+        try {
+          const dbUser = await validateSession(token.sessionToken as string);
+          if (!dbUser) {
+            return { ...token, id: undefined };
+          }
+          token.id = dbUser.id;
+          token.email = dbUser.email;
+          token.displayName = dbUser.displayName;
+        } catch (error) {
+          // 瞬时 DB 失败不应让整页 auth() 抛 JWTSessionError；保留现有 JWT 声明
+          console.error("Session validation failed:", error);
         }
-        token.id = dbUser.id;
-        token.email = dbUser.email;
-        token.displayName = dbUser.displayName;
       }
 
       return token;
