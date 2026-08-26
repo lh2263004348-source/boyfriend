@@ -32,13 +32,14 @@ export function BoyfriendCard({
           aria-label={`与 ${boyfriend.nickname} 聊天${boyfriend.unreadCount > 0 ? `，${boyfriend.unreadCount} 条未读` : ""}`}
         >
           <div className="flex items-start gap-3">
-            <div className="relative size-[60px] shrink-0 overflow-hidden rounded-full">
+            <div className="relative size-[60px] shrink-0 overflow-hidden rounded-full bg-[var(--color-accent-soft)]">
               <Image
                 src={boyfriend.avatarUrl}
                 alt={boyfriend.nickname}
                 fill
+                sizes="60px"
+                quality={75}
                 className="object-cover"
-                unoptimized
               />
             </div>
             <div className="min-w-0 flex-1 pr-8">

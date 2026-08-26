@@ -106,8 +106,9 @@ export function CreateForm({
                     src={mode.avatarUrl}
                     alt={mode.label}
                     fill
+                    sizes="80px"
+                    quality={75}
                     className="object-cover"
-                    unoptimized
                   />
                 </div>
                 <p

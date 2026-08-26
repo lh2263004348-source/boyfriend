@@ -390,13 +390,14 @@ export function ChatView({
           >
             ←
           </Link>
-          <div className="relative size-9 shrink-0 overflow-hidden rounded-full">
+          <div className="relative size-9 shrink-0 overflow-hidden rounded-full bg-[var(--color-accent-soft)]">
             <Image
               src={boyfriend.avatarUrl}
               alt={boyfriend.nickname}
               fill
+              sizes="36px"
+              quality={75}
               className="object-cover"
-              unoptimized
             />
           </div>
           <div className="min-w-0 flex-1">

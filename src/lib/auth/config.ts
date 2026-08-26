@@ -39,6 +39,11 @@ export async function verifyPassword(
   return bcrypt.compare(password, hash);
 }
 
+// Vercel 上若误把本地 AUTH_URL 配进去，Auth.js 会把登录跳转到 localhost
+if (process.env.VERCEL && process.env.AUTH_URL?.includes("localhost")) {
+  delete process.env.AUTH_URL;
+}
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
     Credentials({
