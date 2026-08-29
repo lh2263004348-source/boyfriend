@@ -14,6 +14,8 @@ import {
 } from "./session";
 
 const PASSWORD_MIN_LENGTH = 8;
+/** JWT 已签名可信；回库只用于吊销检测，不必每次 auth() 都打 Neon */
+const SESSION_REVALIDATE_MS = 5 * 60 * 1000;
 
 export function validatePassword(password: string): boolean {
   if (password.length < PASSWORD_MIN_LENGTH) {
@@ -77,12 +79,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return null;
         }
 
-        const { sessionToken } = await createSession(user.id, rememberMe);
-
-        await db
-          .update(users)
-          .set({ lastLoginAt: new Date(), updatedAt: new Date() })
-          .where(eq(users.id, user.id));
+        const [{ sessionToken }] = await Promise.all([
+          createSession(user.id, rememberMe),
+          db
+            .update(users)
+            .set({ lastLoginAt: new Date(), updatedAt: new Date() })
+            .where(eq(users.id, user.id)),
+        ]);
 
         return {
           ...mapDbUserToSessionUser(user),
@@ -111,7 +114,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.email = authUser.email;
         token.displayName = authUser.displayName;
         token.sessionToken = authUser.sessionToken;
-        // 刚写入的 session 不必立刻回库校验，避免 Neon 抖动直接打成 JWTSessionError
+        token.sessionValidatedAt = Date.now();
+        // 刚写入的 session 不必立刻回库；后续按间隔校验，避免每次 auth() 打 Neon
+        return token;
+      }
+
+      const lastValidated = (token.sessionValidatedAt as number | undefined) ?? 0;
+      if (
+        token.id &&
+        Date.now() - lastValidated < SESSION_REVALIDATE_MS
+      ) {
         return token;
       }
 
@@ -124,6 +136,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           token.id = dbUser.id;
           token.email = dbUser.email;
           token.displayName = dbUser.displayName;
+          token.sessionValidatedAt = Date.now();
         } catch (error) {
           // 瞬时 DB 失败不应让整页 auth() 抛 JWTSessionError；保留现有 JWT 声明
           console.error("Session validation failed:", error);

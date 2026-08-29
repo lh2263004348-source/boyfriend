@@ -44,28 +44,26 @@ export async function deleteUserSessions(userId: string): Promise<void> {
 export async function validateSession(
   sessionToken: string
 ): Promise<DbUser | null> {
-  const [session] = await db
-    .select()
+  const [row] = await db
+    .select({
+      user: users,
+      expiresAt: sessions.expiresAt,
+    })
     .from(sessions)
+    .innerJoin(users, eq(sessions.userId, users.id))
     .where(eq(sessions.sessionToken, sessionToken))
     .limit(1);
 
-  if (!session) {
+  if (!row) {
     return null;
   }
 
-  if (session.expiresAt < new Date()) {
+  if (row.expiresAt < new Date()) {
     await deleteSession(sessionToken);
     return null;
   }
 
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, session.userId))
-    .limit(1);
-
-  return user ?? null;
+  return row.user;
 }
 
 export function mapDbUserToSessionUser(user: DbUser): {

@@ -39,6 +39,7 @@ export function RegisterForm(): React.ReactElement {
 
       if (!res.ok) {
         setError(data.error ?? "注册失败");
+        setLoading(false);
         return;
       }
 
@@ -51,15 +52,14 @@ export function RegisterForm(): React.ReactElement {
 
       if (signInResult?.error) {
         setError("注册成功但自动登录失败，请手动登录");
+        setLoading(false);
         router.push("/login");
         return;
       }
 
-      router.push("/create");
-      router.refresh();
+      window.location.assign("/create");
     } catch {
       setError("注册失败，请稍后重试");
-    } finally {
       setLoading(false);
     }
   }

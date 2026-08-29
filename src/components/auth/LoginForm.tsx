@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { useState } from "react";
 
@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export function LoginForm(): React.ReactElement {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/";
 
@@ -35,14 +34,14 @@ export function LoginForm(): React.ReactElement {
 
       if (result?.error) {
         setError("邮箱或密码不正确");
+        setLoading(false);
         return;
       }
 
-      router.push(callbackUrl);
-      router.refresh();
+      // 硬跳转一次，避免 router.push + refresh 各触发一轮 RSC / auth()
+      window.location.assign(callbackUrl);
     } catch {
       setError("登录失败，请稍后重试");
-    } finally {
       setLoading(false);
     }
   }
