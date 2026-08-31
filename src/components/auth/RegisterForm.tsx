@@ -5,25 +5,46 @@ import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { useState } from "react";
 
+import { TurnstileWidget } from "@/components/auth/TurnstileWidget";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+const turnstileEnabled = Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY);
+
+/**
+ * 注册页表单（客户端组件，才能用 useState / 提交后跳转）。
+ *
+ * 提交流程：
+ * 1. POST /api/auth/register  → 创建账号
+ * 2. signIn("credentials")    → 用返回的 loginPass 自动登录
+ * 3. 跳到 /create             → 去创建第一位男友
+ */
 export function RegisterForm(): React.ReactElement {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState("");
+  // 验证失败时 +1，让 Turnstile 组件重新挂载（换一张验证码）
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     setError("");
+
+    if (turnstileEnabled && !turnstileToken) {
+      setError("请先完成人机验证");
+      return;
+    }
+
     setLoading(true);
 
     try {
+      // 第 1 步：先注册（只负责建账号，不负责登录态）
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -32,21 +53,30 @@ export function RegisterForm(): React.ReactElement {
           password,
           displayName: displayName || undefined,
           rememberMe,
+          turnstileToken,
         }),
       });
 
-      const data = (await res.json()) as { error?: string };
+      const data = (await res.json()) as {
+        error?: string;
+        loginPass?: string;
+      };
 
       if (!res.ok) {
         setError(data.error ?? "注册失败");
+        setTurnstileToken("");
+        setTurnstileResetKey((key) => key + 1);
         setLoading(false);
         return;
       }
 
+      // 第 2 步：用刚拿到的 loginPass 自动登录
+      // 注册时已经验过人机，这里不必再点一次 Turnstile
       const signInResult = await signIn("credentials", {
         email,
         password,
         rememberMe: String(rememberMe),
+        loginPass: data.loginPass,
         redirect: false,
       });
 
@@ -57,6 +87,7 @@ export function RegisterForm(): React.ReactElement {
         return;
       }
 
+      // 硬跳转：让浏览器重新带上登录 cookie，避免半登录状态
       window.location.assign("/create");
     } catch {
       setError("注册失败，请稍后重试");
@@ -138,10 +169,14 @@ export function RegisterForm(): React.ReactElement {
               {error}
             </p>
           ) : null}
+          <TurnstileWidget
+            resetKey={turnstileResetKey}
+            onTokenChange={setTurnstileToken}
+          />
           <Button
             type="submit"
             className="min-h-[44px] w-full cursor-pointer"
-            disabled={loading}
+            disabled={loading || (turnstileEnabled && !turnstileToken)}
           >
             {loading ? "注册中…" : "注册并开始"}
           </Button>

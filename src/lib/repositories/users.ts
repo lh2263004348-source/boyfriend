@@ -1,9 +1,16 @@
+/**
+ * 用户表的数据访问层（Repository）。
+ *
+ * 约定：页面 / API 不要直接写 SQL，一律走这里。
+ * 这样查用户、建用户的逻辑只写一份，也方便统一处理「邮箱转小写」这类规则。
+ */
 import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { users, type DbUser, type NewDbUser } from "@/lib/db/schema";
 import type { User } from "@/lib/types";
 
+/** 数据库行 → 业务层 User（故意不带 passwordHash，避免泄露到前端） */
 function mapUser(row: DbUser): User {
   return {
     id: row.id,

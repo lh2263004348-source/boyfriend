@@ -5,10 +5,17 @@ import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { useState } from "react";
 
+import { TurnstileWidget } from "@/components/auth/TurnstileWidget";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+const turnstileEnabled = Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY);
+
+/**
+ * 登录表单。
+ * 提交后调用 signIn("credentials") → 走到 /api/auth/[...nextauth] → config.ts 的 authorize。
+ */
 export function LoginForm(): React.ReactElement {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/";
@@ -16,12 +23,20 @@ export function LoginForm(): React.ReactElement {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     setError("");
+
+    if (turnstileEnabled && !turnstileToken) {
+      setError("请先完成人机验证");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -29,16 +44,20 @@ export function LoginForm(): React.ReactElement {
         email,
         password,
         rememberMe: String(rememberMe),
+        turnstileToken,
         redirect: false,
       });
 
       if (result?.error) {
         setError("邮箱或密码不正确");
+        setTurnstileToken("");
+        setTurnstileResetKey((key) => key + 1);
         setLoading(false);
         return;
       }
 
-      // 硬跳转一次，避免 router.push + refresh 各触发一轮 RSC / auth()
+      // 硬跳转一次：让浏览器带上新 cookie。
+      // 不用 router.push，避免再触发一轮服务端 auth() 导致闪一下未登录。
       window.location.assign(callbackUrl);
     } catch {
       setError("登录失败，请稍后重试");
@@ -109,10 +128,14 @@ export function LoginForm(): React.ReactElement {
               {error}
             </p>
           ) : null}
+          <TurnstileWidget
+            resetKey={turnstileResetKey}
+            onTokenChange={setTurnstileToken}
+          />
           <Button
             type="submit"
             className="min-h-[44px] w-full cursor-pointer"
-            disabled={loading}
+            disabled={loading || (turnstileEnabled && !turnstileToken)}
           >
             {loading ? "登录中…" : "登录"}
           </Button>

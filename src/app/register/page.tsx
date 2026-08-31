@@ -1,3 +1,6 @@
+/**
+ * 注册页：只负责排版居中，表单逻辑都在 RegisterForm。
+ */
 import { RegisterForm } from "@/components/auth/RegisterForm";
 
 export default function RegisterPage(): React.ReactElement {

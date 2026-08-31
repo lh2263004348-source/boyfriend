@@ -11,6 +11,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
+/** 账号表：密码只存 passwordHash，不存明文 */
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: varchar("email", { length: 255 }).notNull().unique(),
@@ -22,6 +23,7 @@ export const users = pgTable("users", {
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
 });
 
+/** 登录会话表：退出登录或过期后，对应 JWT 也会失效 */
 export const sessions = pgTable(
   "sessions",
   {
