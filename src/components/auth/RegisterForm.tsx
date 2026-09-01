@@ -1,10 +1,16 @@
 "use client";
 
+import { Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { useState } from "react";
 
+import {
+  AuthShell,
+  authInputClassName,
+  authSubmitButtonClassName,
+} from "@/components/auth/AuthShell";
 import { TurnstileWidget } from "@/components/auth/TurnstileWidget";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,9 +31,9 @@ export function RegisterForm(): React.ReactElement {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState("");
-  // 验证失败时 +1，让 Turnstile 组件重新挂载（换一张验证码）
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -44,7 +50,6 @@ export function RegisterForm(): React.ReactElement {
     setLoading(true);
 
     try {
-      // 第 1 步：先注册（只负责建账号，不负责登录态）
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -70,8 +75,6 @@ export function RegisterForm(): React.ReactElement {
         return;
       }
 
-      // 第 2 步：用刚拿到的 loginPass 自动登录
-      // 注册时已经验过人机，这里不必再点一次 Turnstile
       const signInResult = await signIn("credentials", {
         email,
         password,
@@ -87,7 +90,6 @@ export function RegisterForm(): React.ReactElement {
         return;
       }
 
-      // 硬跳转：让浏览器重新带上登录 cookie，避免半登录状态
       window.location.assign("/create");
     } catch {
       setError("注册失败，请稍后重试");
@@ -96,101 +98,116 @@ export function RegisterForm(): React.ReactElement {
   }
 
   return (
-    <div className="w-full max-w-md">
-      <div className="mb-8 text-center">
-        <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-[var(--color-accent-soft)]">
-          <span className="text-2xl text-[var(--color-accent-primary)]" aria-hidden="true">
-            ♡
-          </span>
+    <AuthShell
+      title="创建账号"
+      showBackButton
+      backHref="/login"
+      backLabel="返回登录"
+      subtitle={
+        <>
+          已有账号？
+          <Link
+            href="/login"
+            className="ml-1 font-medium text-[var(--color-accent-primary)] hover:underline"
+          >
+            去登录
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="space-y-2">
+          <Label htmlFor="email" className="text-[var(--color-text-primary)]">
+            邮箱
+          </Label>
+          <Input
+            id="email"
+            type="email"
+            placeholder="你的邮箱"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="email"
+            className={authInputClassName}
+          />
         </div>
-        <h1 className="text-2xl font-semibold text-[var(--color-text-primary)]">
-          纸片人男友
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          选一个性格，开始专属陪伴
-        </p>
-      </div>
 
-      <div className="rounded-2xl border border-border/60 bg-white p-6 shadow-md">
-        <h2 className="mb-1 text-center text-lg font-medium">创建账号</h2>
-        <p className="mb-6 text-center text-sm text-muted-foreground">
-          注册后可直接创建你的第一位男友
-        </p>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">邮箱</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="你的邮箱"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="displayName">昵称（可选）</Label>
-            <Input
-              id="displayName"
-              type="text"
-              placeholder="他该怎么称呼你"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              autoComplete="nickname"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">密码</Label>
+        <div className="space-y-2">
+          <Label htmlFor="displayName" className="text-[var(--color-text-primary)]">
+            昵称（可选）
+          </Label>
+          <Input
+            id="displayName"
+            type="text"
+            placeholder="他该怎么称呼你"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            autoComplete="nickname"
+            className={authInputClassName}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="password" className="text-[var(--color-text-primary)]">
+            密码
+          </Label>
+          <div className="relative">
             <Input
               id="password"
-              type="password"
+              type={showPassword ? "text" : "password"}
               placeholder="至少 8 位，含字母和数字"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               autoComplete="new-password"
+              className={`${authInputClassName} pr-12`}
             />
-          </div>
-          <div className="flex items-center gap-2">
-            <input
-              id="rememberMe"
-              type="checkbox"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-              className="size-4 cursor-pointer rounded border-input accent-[var(--color-accent-primary)]"
-            />
-            <Label htmlFor="rememberMe" className="cursor-pointer font-normal">
-              记住我（30 天）
-            </Label>
-          </div>
-          {error ? (
-            <p className="text-sm text-[var(--color-error)]" role="alert">
-              {error}
-            </p>
-          ) : null}
-          <TurnstileWidget
-            resetKey={turnstileResetKey}
-            onTokenChange={setTurnstileToken}
-          />
-          <Button
-            type="submit"
-            className="min-h-[44px] w-full cursor-pointer"
-            disabled={loading || (turnstileEnabled && !turnstileToken)}
-          >
-            {loading ? "注册中…" : "注册并开始"}
-          </Button>
-          <p className="text-center text-sm text-muted-foreground">
-            已有账号？
-            <Link
-              href="/login"
-              className="ml-1 cursor-pointer text-[var(--color-accent-primary)] hover:underline"
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-accent-soft)]"
+              aria-label={showPassword ? "隐藏密码" : "显示密码"}
             >
-              去登录
-            </Link>
+              {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <input
+            id="rememberMe"
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(e) => setRememberMe(e.target.checked)}
+            className="size-4 cursor-pointer rounded border-[#E8DFD6] accent-[var(--color-accent-primary)]"
+          />
+          <Label
+            htmlFor="rememberMe"
+            className="cursor-pointer font-normal text-[var(--color-text-secondary)]"
+          >
+            记住我（30 天）
+          </Label>
+        </div>
+
+        {error ? (
+          <p className="text-sm text-[var(--color-error)]" role="alert">
+            {error}
           </p>
-        </form>
-      </div>
-    </div>
+        ) : null}
+
+        <TurnstileWidget
+          resetKey={turnstileResetKey}
+          onTokenChange={setTurnstileToken}
+        />
+
+        <Button
+          type="submit"
+          className={authSubmitButtonClassName}
+          disabled={loading || (turnstileEnabled && !turnstileToken)}
+        >
+          {loading ? "注册中…" : "注册并开始"}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }
