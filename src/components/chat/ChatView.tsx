@@ -434,7 +434,7 @@ export function ChatView({
   );
 
   return (
-    <div className="flex h-[100dvh] flex-col bg-[var(--color-bg-primary)]">
+    <div className="chat-screen flex h-[100dvh] flex-col overflow-hidden bg-[var(--color-bg-primary)]">
       <header className="shrink-0 border-b border-border bg-white/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-lg items-center gap-2 px-3 py-2">
           <Link
@@ -468,7 +468,7 @@ export function ChatView({
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col overflow-hidden">
         <div
           ref={scrollContainerRef}
-          className="flex-1 overflow-y-auto overscroll-contain px-4 py-4"
+          className="scrollbar-hidden flex-1 overflow-y-auto overscroll-contain px-4 py-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
           role="log"
           aria-live="polite"
           aria-label={`与 ${boyfriend.nickname} 的聊天记录`}
