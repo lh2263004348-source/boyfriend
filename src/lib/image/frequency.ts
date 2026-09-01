@@ -7,10 +7,12 @@ import { countUserMessagesByBoyfriendId } from "@/lib/repositories/messages";
 
 const USER_MESSAGE_WINDOW: Record<string, number> = {
   scene: 15,
-  selfie: 15,
   share: 20,
   gift: 15,
 };
+
+/** PRD：selfie 每会话最多 2 次 */
+const SELFIE_SESSION_LIMIT = 2;
 
 function isGeneratedImageKey(mediaKey: string | null): boolean {
   if (!mediaKey) return false;
@@ -67,11 +69,39 @@ export async function countUserMessagesSinceLastGeneratedImage(
   return result?.count ?? 0;
 }
 
+async function countSelfiesInSession(boyfriendId: string): Promise<number> {
+  const imageRows = await db
+    .select({ mediaKey: messages.mediaKey })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.boyfriendId, boyfriendId),
+        eq(messages.role, "boyfriend"),
+        eq(messages.type, "image")
+      )
+    );
+
+  return imageRows.filter((row) =>
+    row.mediaKey?.includes("chat-images/selfie_")
+  ).length;
+}
+
 export async function canGenerateImageType(
   boyfriendId: string,
   userId: string,
   imageType: string
 ): Promise<{ allowed: boolean; reason?: string }> {
+  if (imageType === "selfie") {
+    const selfieCount = await countSelfiesInSession(boyfriendId);
+    if (selfieCount >= SELFIE_SESSION_LIMIT) {
+      return {
+        allowed: false,
+        reason: `自拍频率限制：本会话已 ${selfieCount}/${SELFIE_SESSION_LIMIT} 次`,
+      };
+    }
+    return { allowed: true };
+  }
+
   const window = USER_MESSAGE_WINDOW[imageType] ?? USER_MESSAGE_WINDOW.scene;
   const sinceLast = await countUserMessagesSinceLastGeneratedImage(
     boyfriendId,

@@ -26,6 +26,8 @@ import {
 } from "@/lib/surprise/trigger";
 import { getStickerById, getStickersByEmotion } from "@/lib/stickers/data";
 import { attachVoiceToMessage } from "@/lib/tts/attachVoice";
+import { detectUserMediaIntent, shouldSuppressSurprise } from "@/lib/media/intent";
+import { reconcileDecision } from "@/lib/media/reconcileDecision";
 
 const MAX_USER_MESSAGE_LENGTH = 2000;
 
@@ -180,7 +182,17 @@ export async function POST(request: Request): Promise<Response> {
             );
           }
 
-          const { content, decision } = splitContentAndDecision(fullText);
+          const { content, decision: rawDecision } = splitContentAndDecision(fullText);
+
+          let decision = rawDecision;
+          if (hasText && body.userMessage?.trim()) {
+            decision = await reconcileDecision(
+              rawDecision,
+              body.userMessage.trim(),
+              boyfriend!,
+              userId
+            );
+          }
 
           if (content) {
             await createMessage(
@@ -222,12 +234,18 @@ export async function POST(request: Request): Promise<Response> {
             );
           }
 
-          surprisePayload = tryTriggerSurprise(
-            boyfriend!,
-            history,
-            surpriseMessagesSince,
-            lastUserMsg
-          );
+          const userMediaIntent = hasText
+            ? detectUserMediaIntent(body.userMessage!.trim())
+            : null;
+
+          if (!shouldSuppressSurprise(userMediaIntent, decision)) {
+            surprisePayload = tryTriggerSurprise(
+              boyfriend!,
+              history,
+              surpriseMessagesSince,
+              lastUserMsg
+            );
+          }
 
           if (surprisePayload) {
             boyfriend =

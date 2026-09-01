@@ -327,13 +327,16 @@ export function ChatView({
           result.decision?.shouldGenerateImage &&
           result.decision.imagePrompt?.trim()
         ) {
+          const imageType = result.decision.imageType ?? "scene";
+          const pendingCaption =
+            imageType === "selfie" ? "给你报备~稍等一下" : "给你看一张图~";
           const pendingId = `pending-image-${Date.now()}`;
           const pendingMessage: Message = {
             id: pendingId,
             boyfriendId: boyfriend.id,
             role: "boyfriend",
             type: "image",
-            content: "给你看一张图~",
+            content: pendingCaption,
             mediaKey: null,
             emotion: result.decision.emotion ?? null,
             isSurprise: false,
@@ -348,8 +351,8 @@ export function ChatView({
             body: JSON.stringify({
               boyfriendId: boyfriend.id,
               prompt: result.decision.imagePrompt,
-              imageType: result.decision.imageType ?? "scene",
-              caption: "给你看一张图~",
+              imageType,
+              caption: pendingCaption,
               userMessage: lastUserTextRef.current,
             }),
           })
