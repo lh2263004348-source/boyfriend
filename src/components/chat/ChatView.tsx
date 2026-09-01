@@ -21,6 +21,10 @@ import {
   formatMessageTime,
   shouldShowTimeDivider,
 } from "@/lib/chat/timeFormat";
+import {
+  createOptimisticBoyfriendMessage,
+  mergeMessagesWithServer,
+} from "@/lib/chat/mergeMessages";
 import type { StickerItem } from "@/lib/stickers/data";
 import { getRelationshipModeConfig } from "@/lib/relationship/config";
 import type { Boyfriend, Message, UserProfileFact } from "@/lib/types";
@@ -38,6 +42,9 @@ export function ChatView({
 }: ChatViewProps): React.ReactElement {
   const dispatch = useChatDispatch();
   const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [animateMessageIds, setAnimateMessageIds] = useState<Set<string>>(
+    () => new Set()
+  );
   const [hasMore, setHasMore] = useState(initialMessages.length >= 50);
   const [loadingMore, setLoadingMore] = useState(false);
   const [intimacy, setIntimacy] = useState(boyfriend.intimacy);
@@ -57,12 +64,29 @@ export function ChatView({
 
   const modeConfig = getRelationshipModeConfig(boyfriend.relationshipMode);
 
-  const addMessage = useCallback((message: Message): void => {
-    setMessages((prev) => {
-      if (prev.some((m) => m.id === message.id)) return prev;
-      return [...prev, message];
+  const markMessageAnimated = useCallback((id: string): void => {
+    setAnimateMessageIds((prev) => {
+      if (prev.has(id)) {
+        return prev;
+      }
+      const next = new Set(prev);
+      next.add(id);
+      return next;
     });
   }, []);
+
+  const addMessage = useCallback(
+    (message: Message, options?: { animate?: boolean }): void => {
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === message.id)) return prev;
+        return [...prev, message];
+      });
+      if (options?.animate ?? true) {
+        markMessageAnimated(message.id);
+      }
+    },
+    [markMessageAnimated]
+  );
 
   useProactive({
     boyfriendId: boyfriend.id,
@@ -171,7 +195,7 @@ export function ChatView({
     );
     const data = (await res.json()) as { messages?: Message[] };
     if (data.messages) {
-      setMessages(data.messages);
+      setMessages((prev) => mergeMessagesWithServer(prev, data.messages!));
       setHasMore(data.messages.length >= 50);
     }
   }, [boyfriend.id]);
@@ -186,7 +210,9 @@ export function ChatView({
         const data = (await res.json()) as { messages?: Message[] };
         const target = data.messages?.find((m) => m.id === messageId);
         if (target?.type === "voice" && target.mediaKey) {
-          if (data.messages) setMessages(data.messages);
+          if (data.messages) {
+            setMessages((prev) => mergeMessagesWithServer(prev, data.messages!));
+          }
           return;
         }
       }
@@ -243,10 +269,23 @@ export function ChatView({
         createdAt: new Date(),
       };
       setMessages((prev) => [...prev, tempUserMessage]);
+      markMessageAnimated(tempUserMessage.id);
       lastUserTextRef.current = text;
 
       try {
         const result = await sendMessage(boyfriend.id, text);
+
+        if (result.content.trim()) {
+          setMessages((prev) => [
+            ...prev,
+            createOptimisticBoyfriendMessage(
+              boyfriend.id,
+              result.content,
+              result.decision?.emotion ?? null
+            ),
+          ]);
+        }
+
         reset();
 
         sessionStorage.setItem(
@@ -301,6 +340,7 @@ export function ChatView({
             createdAt: new Date(),
           };
           setMessages((prev) => [...prev, pendingMessage]);
+          markMessageAnimated(pendingId);
 
           void fetch("/api/image", {
             method: "POST",
@@ -319,6 +359,7 @@ export function ChatView({
                 degraded?: boolean;
               };
               if (data.message) {
+                markMessageAnimated(data.message.id);
                 setMessages((prev) =>
                   prev
                     .filter((m) => m.id !== pendingId)
@@ -336,7 +377,7 @@ export function ChatView({
         setMessages((prev) => prev.filter((m) => m.id !== tempUserMessage.id));
       }
     },
-    [boyfriend, dispatch, pollVoiceMessage, reloadMessages, reset, sendMessage]
+    [boyfriend, dispatch, markMessageAnimated, pollVoiceMessage, reloadMessages, reset, sendMessage]
   );
 
   const handleSendSticker = useCallback(
@@ -353,11 +394,24 @@ export function ChatView({
         createdAt: new Date(),
       };
       setMessages((prev) => [...prev, tempUserMessage]);
+      markMessageAnimated(tempUserMessage.id);
 
       try {
         const result = await sendMessage(boyfriend.id, "", {
           stickerId: sticker.id,
         });
+
+        if (result.content.trim()) {
+          setMessages((prev) => [
+            ...prev,
+            createOptimisticBoyfriendMessage(
+              boyfriend.id,
+              result.content,
+              result.decision?.emotion ?? null
+            ),
+          ]);
+        }
+
         reset();
 
         if (result.meta) {
@@ -376,7 +430,7 @@ export function ChatView({
         );
       }
     },
-    [boyfriend, dispatch, reloadMessages, reset, sendMessage]
+    [boyfriend, dispatch, markMessageAnimated, reloadMessages, reset, sendMessage]
   );
 
   return (
@@ -439,7 +493,10 @@ export function ChatView({
                     time={formatMessageTime(message.createdAt)}
                   />
                 ) : null}
-                <MessageBubble message={message} />
+                <MessageBubble
+                  message={message}
+                  animate={animateMessageIds.has(message.id)}
+                />
               </div>
             );
           })}

@@ -5,6 +5,7 @@ import type { Message } from "@/lib/types";
 
 interface MessageBubbleProps {
   message: Message;
+  animate?: boolean;
 }
 
 function getMessageAriaLabel(message: Message): string {
@@ -22,14 +23,18 @@ function getMessageAriaLabel(message: Message): string {
   return `${who}：${message.content}`;
 }
 
-export function MessageBubble({ message }: MessageBubbleProps): React.ReactElement {
+export function MessageBubble({
+  message,
+  animate = false,
+}: MessageBubbleProps): React.ReactElement {
   const isUser = message.role === "user";
   const alignClass = isUser ? "justify-end" : "justify-start";
   const ariaLabel = getMessageAriaLabel(message);
+  const animClass = animate ? "animate-bubble-in" : "";
 
   if (message.type === "image" && !message.mediaKey) {
     return (
-      <div className={`flex ${alignClass} mb-3 animate-bubble-in`}>
+      <div className={`flex ${alignClass} mb-3 ${animClass}`}>
         <div
           className="max-w-[75%] rounded-2xl bg-white px-4 py-3 shadow-sm"
           aria-label={ariaLabel}
@@ -44,7 +49,7 @@ export function MessageBubble({ message }: MessageBubbleProps): React.ReactEleme
 
   if (message.type === "image" && message.mediaKey) {
     return (
-      <div className={`flex ${alignClass} mb-3 animate-bubble-in`}>
+      <div className={`flex ${alignClass} mb-3 ${animClass}`}>
         <div
           className="max-w-[75%] rounded-2xl bg-white p-2 shadow-sm"
           aria-label={ariaLabel}
@@ -65,7 +70,7 @@ export function MessageBubble({ message }: MessageBubbleProps): React.ReactEleme
 
   if (message.type === "voice" && !message.mediaKey) {
     return (
-      <div className={`flex ${alignClass} mb-3 animate-bubble-in`}>
+      <div className={`flex ${alignClass} mb-3 ${animClass}`}>
         <div
           className="max-w-[75%] rounded-2xl rounded-bl-md bg-white px-4 py-3 shadow-sm"
           aria-label={ariaLabel}
@@ -89,7 +94,7 @@ export function MessageBubble({ message }: MessageBubbleProps): React.ReactEleme
 
   if (message.type === "voice" && message.mediaKey) {
     return (
-      <div className={`flex ${alignClass} mb-3 animate-bubble-in`}>
+      <div className={`flex ${alignClass} mb-3 ${animClass}`}>
         <div
           className="max-w-[75%] rounded-2xl rounded-bl-md bg-white px-4 py-3 shadow-sm"
           aria-label={ariaLabel}
@@ -108,7 +113,7 @@ export function MessageBubble({ message }: MessageBubbleProps): React.ReactEleme
     const sticker = getStickerById(message.content);
     const emoji = sticker?.emoji ?? message.content;
     return (
-      <div className={`flex ${alignClass} mb-3 animate-bubble-in`}>
+      <div className={`flex ${alignClass} mb-3 ${animClass}`}>
         <div
           className="flex size-20 items-center justify-center rounded-2xl bg-white text-5xl shadow-sm"
           aria-label={ariaLabel}
@@ -121,7 +126,7 @@ export function MessageBubble({ message }: MessageBubbleProps): React.ReactEleme
   }
 
   return (
-    <div className={`flex ${alignClass} mb-3 animate-bubble-in`}>
+    <div className={`flex ${alignClass} mb-3 ${animClass}`}>
       <div
         className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-[length:var(--text-message)] leading-relaxed shadow-sm ${
           isUser
