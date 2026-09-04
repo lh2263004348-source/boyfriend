@@ -1,6 +1,59 @@
 import type { Message } from "@/lib/types";
 
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
+/** 产品面向国内用户，SSR（Vercel UTC）与浏览器需用同一时区，避免 hydration 文本不一致 */
+const APP_TIMEZONE = "Asia/Shanghai";
+
+interface ZonedParts {
+  year: string;
+  month: string;
+  day: string;
+  hour: string;
+  minute: string;
+}
+
+function getZonedParts(date: Date, timeZone: string): ZonedParts {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(date);
+  const pick = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((part) => part.type === type)?.value ?? "00";
+
+  return {
+    year: pick("year"),
+    month: pick("month"),
+    day: pick("day"),
+    hour: pick("hour"),
+    minute: pick("minute"),
+  };
+}
+
+function formatClock(parts: Pick<ZonedParts, "hour" | "minute">): string {
+  return `${parts.hour}:${parts.minute}`;
+}
+
+function isSameZonedDay(a: ZonedParts, b: ZonedParts): boolean {
+  return a.year === b.year && a.month === b.month && a.day === b.day;
+}
+
+function getYesterdayParts(now: ZonedParts): ZonedParts {
+  const utcNoon = Date.UTC(
+    Number(now.year),
+    Number(now.month) - 1,
+    Number(now.day),
+    12
+  );
+  const yesterday = new Date(utcNoon - 24 * 60 * 60 * 1000);
+  return getZonedParts(yesterday, APP_TIMEZONE);
+}
 
 export function shouldShowTimeDivider(
   current: Message,
@@ -13,46 +66,22 @@ export function shouldShowTimeDivider(
 }
 
 export function formatMessageTime(date: Date): string {
-  const d = new Date(date);
-  const now = new Date();
-  const isToday =
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate();
+  const messageParts = getZonedParts(new Date(date), APP_TIMEZONE);
+  const nowParts = getZonedParts(new Date(), APP_TIMEZONE);
+  const time = formatClock(messageParts);
 
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const isYesterday =
-    d.getFullYear() === yesterday.getFullYear() &&
-    d.getMonth() === yesterday.getMonth() &&
-    d.getDate() === yesterday.getDate();
-
-  const time = d.toLocaleTimeString("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-
-  if (isToday) return time;
-  if (isYesterday) return `昨天 ${time}`;
-
-  const sameYear = d.getFullYear() === now.getFullYear();
-  if (sameYear) {
-    return d.toLocaleDateString("zh-CN", {
-      month: "numeric",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
+  if (isSameZonedDay(messageParts, nowParts)) {
+    return time;
   }
 
-  return d.toLocaleDateString("zh-CN", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+  const yesterdayParts = getYesterdayParts(nowParts);
+  if (isSameZonedDay(messageParts, yesterdayParts)) {
+    return `昨天 ${time}`;
+  }
+
+  if (messageParts.year === nowParts.year) {
+    return `${Number(messageParts.month)}/${Number(messageParts.day)} ${time}`;
+  }
+
+  return `${messageParts.year}/${Number(messageParts.month)}/${Number(messageParts.day)} ${time}`;
 }

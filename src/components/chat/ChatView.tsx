@@ -54,6 +54,8 @@ export function ChatView({
     meaning: string;
   } | null>(null);
   const [showNextStage, setShowNextStage] = useState(false);
+  // 图片生成期间复用“对方正在输入”反馈，避免插入一条“图片生成中”的假消息。
+  const [pendingImageCount, setPendingImageCount] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isLoadingOlderRef = useRef(false);
@@ -63,6 +65,7 @@ export function ChatView({
     useStreaming();
 
   const modeConfig = getRelationshipModeConfig(boyfriend.relationshipMode);
+  const isImageGenerating = pendingImageCount > 0;
 
   const markMessageAnimated = useCallback((id: string): void => {
     setAnimateMessageIds((prev) => {
@@ -91,7 +94,8 @@ export function ChatView({
   useProactive({
     boyfriendId: boyfriend.id,
     relationshipMode: boyfriend.relationshipMode,
-    enabled: !isTyping && !isStreaming && messages.length > 0,
+    enabled:
+      !isTyping && !isStreaming && !isImageGenerating && messages.length > 0,
     onProactiveMessage: addMessage,
   });
 
@@ -187,7 +191,7 @@ export function ChatView({
   useEffect(() => {
     if (isLoadingOlderRef.current) return;
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamingText, isTyping, isStreaming]);
+  }, [messages, streamingText, isTyping, isStreaming, isImageGenerating]);
 
   const reloadMessages = useCallback(async (): Promise<void> => {
     const res = await fetch(
@@ -330,20 +334,8 @@ export function ChatView({
           const imageType = result.decision.imageType ?? "scene";
           const pendingCaption =
             imageType === "selfie" ? "给你报备~稍等一下" : "给你看一张图~";
-          const pendingId = `pending-image-${Date.now()}`;
-          const pendingMessage: Message = {
-            id: pendingId,
-            boyfriendId: boyfriend.id,
-            role: "boyfriend",
-            type: "image",
-            content: pendingCaption,
-            mediaKey: null,
-            emotion: result.decision.emotion ?? null,
-            isSurprise: false,
-            createdAt: new Date(),
-          };
-          setMessages((prev) => [...prev, pendingMessage]);
-          markMessageAnimated(pendingId);
+          // 不插入“图片生成中”的占位消息；生成期间继续显示对方正在输入。
+          setPendingImageCount((count) => count + 1);
 
           void fetch("/api/image", {
             method: "POST",
@@ -359,21 +351,16 @@ export function ChatView({
             .then(async (res) => {
               const data = (await res.json()) as {
                 message?: Message;
-                degraded?: boolean;
               };
               if (data.message) {
-                markMessageAnimated(data.message.id);
-                setMessages((prev) =>
-                  prev
-                    .filter((m) => m.id !== pendingId)
-                    .concat(data.message!)
-                );
-              } else {
-                setMessages((prev) => prev.filter((m) => m.id !== pendingId));
+                addMessage(data.message);
               }
             })
             .catch(() => {
-              setMessages((prev) => prev.filter((m) => m.id !== pendingId));
+              // 图片生成失败时静默降级，主对话不受影响。
+            })
+            .finally(() => {
+              setPendingImageCount((count) => Math.max(0, count - 1));
             });
         }
       } catch {
@@ -503,7 +490,7 @@ export function ChatView({
               </div>
             );
           })}
-          <TypingIndicator visible={isTyping} />
+          <TypingIndicator visible={isTyping || isImageGenerating} />
           {isStreaming && streamingText ? (
             <StreamingText text={streamingText} />
           ) : null}
